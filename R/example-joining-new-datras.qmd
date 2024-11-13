@@ -1,0 +1,603 @@
+---
+title: "Prepare CPUE data from DATRAS exchange"
+author: "Max Lindmark"
+date: today
+date-format: iso
+toc: true
+format: 
+  html:
+    page-layout: full
+    embed-resources: true
+knitr: 
+  opts_chunk:
+    fig.align: center
+    out-width: 100%
+editor: source
+---
+
+# Intro
+In this script, I load exchange data from datras and calculate catch of cod and flounder in unit $\text{kg/km}^2$ (with TVL gear) by size group, by correcting for gear dimensions, sweeplength and trawl speed, following Orio et al 2017. 
+
+## Load libraries
+
+```{r setup}
+#| warning: false
+#| message: false
+
+# Load libraries, install if needed
+pkgs <- c(
+  "tidyverse", "tidylog", "RCurl", "devtools",
+  "janitor", "icesDatras", "mapdata", "raster", "mapplots"
+)
+
+if (length(setdiff(pkgs, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(pkgs, rownames(installed.packages())), dependencies = T)
+}
+
+invisible(lapply(pkgs, library, character.only = T))
+
+# Set path
+home <- here::here()
+```
+
+## Read data
+
+```{r read data}
+#| message: false
+
+# Read HH data
+# bits_hh <- getDATRAS(record = "HH", survey = "BITS", years = 2010:2023, quarters = c(1, 4))
+# write_csv(bits_hh, paste0(home, "/data/DATRAS/exchange/bits_hh.csv"))
+bits_hh <- read_csv(paste0(home, "/data/DATRAS/exchange/bits_hh.csv"))
+
+# Read HL data
+# bits_hl <- getDATRAS(record = "HL", survey = "BITS", years = 2010:2023, quarters = c(1, 4))
+# write_csv(bits_hl, paste0(home, "/data/DATRAS/exchange/bits_hl.csv"))
+bits_hl <- read_csv(paste0(home, "/data/DATRAS/exchange/bits_hl.csv")) |>
+  mutate(StNo = as.character(StNo))
+
+# Read CA data
+# bits_ca <- getDATRAS(record = "CA", survey = "BITS", years = 2010:2023, quarters = c(1, 4))
+# write_csv(bits_ca, paste0(home, "/data/DATRAS/exchange/bits_ca.csv"))
+bits_ca <- read_csv(paste0(home, "/data/DATRAS/exchange/bits_ca.csv"))
+
+# Read gear standardization data
+newsweep <- read.csv(paste0(home, "/data/trawl-data-historical/Datras/sweep_9116.csv"), sep = ";", fileEncoding = "windows-1252")
+```
+
+## Standardize catch data
+
+#### Create a simple haul ID that works across all exchange data
+
+```{r haul id}
+#| message: false
+
+# Create ID column
+bits_ca <- bits_ca |>
+  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
+
+bits_hl <- bits_hl |>
+  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
+
+bits_hh <- bits_hh |>
+  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
+```
+
+#### Clean DATRAS EXCHANGE data
+
+```{r}
+#| message: false
+
+# Add ICES rectangle
+bits_hh$ices_rect <- mapplots::ices.rect2(lon = bits_hh$ShootLong, lat = bits_hh$ShootLat)
+
+# Add ICES subdivisions
+shape <- shapefile(paste0(here::here(), "/data/ICES_StatRec_mapto_ICES_Areas/StatRec_map_Areas_Full_20170124.shp"))
+
+pts <- SpatialPoints(cbind(bits_hh$ShootLong, bits_hh$ShootLat),
+  proj4string = CRS(proj4string(shape))
+)
+
+bits_hh$sub_div <- over(pts, shape)$Area_27
+
+# Rename subdivisions to the more common names and do some more filtering (by sub div and area)
+sort(unique(bits_hh$sub_div))
+
+bits_hh <- bits_hh |>
+  mutate(
+    sub_div = factor(sub_div),
+    sub_div = fct_recode(sub_div,
+      "20" = "3.a.20",
+      "21" = "3.a.21",
+      "22" = "3.c.22",
+      "23" = "3.b.23",
+      "24" = "3.d.24",
+      "25" = "3.d.25",
+      "26" = "3.d.26",
+      "27" = "3.d.27",
+      "28" = "3.d.28.1",
+      "28" = "3.d.28.2",
+      "29" = "3.d.29"
+    ),
+    sub_div = as.character(sub_div)
+  )
+```
+
+```{r filter hauls}
+#| message: false
+
+# Select just valid, additional and no oxygen hauls
+bits_hh <- bits_hh |>
+  filter(HaulVal %in% c("A", "N", "V"))
+
+# Now add the fishing line information from the sweep file (we need that later to standardize based on gear geometry). We add in the the HH data and then transfer it to the other exchange data files when left_joining. Check which Fishing lines I have in the sweep data:
+fishing_line <- newsweep |>
+  group_by(Gear) |>
+  distinct(Fishing.line)
+
+bits_hh <- left_join(bits_hh, fishing_line, by = "Gear")
+
+# Select the hauls in the HH data when subsetting the HL data
+bits_hl <- bits_hl |>
+  filter(haul_id %in% bits_hh$haul_id)
+
+bits_hh_merge <- bits_hh |>
+  mutate(date = paste(Year, Month, Day, sep = "-")) |> 
+  dplyr::select(
+    sub_div, ices_rect, HaulVal, StdSpecRecCode, BySpecRecCode, Fishing.line, Month,
+    DataType, HaulDur, GroundSpeed, haul_id, ShootLat, ShootLong, Day, Month, date
+    )
+
+bits_hl <- left_join(bits_hl, bits_hh_merge, by = c("haul_id"))
+bits_ca <- left_join(bits_ca, bits_hh_merge, by = c("haul_id"))
+```
+
+Add in species names (see get_taxa.R)
+
+```{r add species name}
+#| message: false
+
+tax <- read_csv(paste0(home, "/output/taxa.csv"))
+
+bits_hl <- bits_hl |>
+  left_join(tax, by = c("SpecCodeType", "SpecCode")) |>
+  rename(Species = latin_name)
+
+bits_ca <- bits_ca |>
+  left_join(tax, by = c("SpecCodeType", "SpecCode")) |>
+  rename(Species = latin_name)
+
+hlcod <- bits_hl |> filter(common_name == "cod")
+hlfle <- bits_hl |> filter(common_name == "flounder")
+```
+
+#### Prepare to add 0 catches
+
+```{r add zero catches}
+#| message: false
+
+# Find common columns in the HH and HL data (here already subset by species)
+comcol <- intersect(names(hlcod), names(bits_hh))
+
+# Cod: Add 0s and then remove lines with SpecVal = 0 (first NA because we don't have a match in the HH, then make them 0 later)
+hlcod0 <- full_join(hlcod, bits_hh[, comcol], by = comcol)
+
+hlcod0$SpecVal[is.na(hlcod0$SpecVal)] <- "zeroCatch"
+
+hlcod0$SpecVal <- factor(hlcod0$SpecVal)
+
+hlcod0 <- hlcod0 |> filter(!SpecVal == "0")
+
+# Add species again after merge
+hlcod0$Species <- "Gadus morhua"
+
+# Flounder: Add 0s, remove them if StdSpecRecCode !=1 and then remove lines with SpecVal = 0
+hlfle0 <- full_join(hlfle, bits_hh[, comcol], by = comcol)
+
+hlfle0 <- hlfle0[!(is.na(hlfle0$Species) & hlfle0$StdSpecRecCode != 1), ]
+
+hlfle0$SpecVal[is.na(hlfle0$SpecVal)] <- "zeroCatch"
+hlfle0$SpecVal <- factor(hlfle0$SpecVal)
+
+hlfle0 <- hlfle0 |> filter(!SpecVal == "0")
+
+hlfle0$Species <- "Platichthys flesus"
+```
+
+#### Create (unstandardized) CPUE for `SpecVal=1`. If `DataType=C` then `CPUEun=HLNoAtLngt`, if `DataType=R` then `CPUEun=HLNoAtLngt/(HaulDur/60)`, if `DataType=S` then `CPUEun=(HLNoAtLngt*SubFactor)/(HaulDur/60)`. If `SpecVal="zeroCatch"` then `CPUEun=0`, if `SpecVal=4` we need to decide (no length measurements, only total catch). Note that here we also add zero CPUE if `SpecVal=="zeroCatch"`.
+
+Then I will sum for the same haul the CPUE of the same length classes if they were sampled with different subfactors or with different sexes.
+
+```{r calculate cpue}
+#| message: false
+
+# Cod
+hlcod0 <- hlcod0 |>
+  mutate(CPUEun = ifelse(SpecVal == "1" & DataType == "C", HLNoAtLngt,
+                         
+                         ifelse(SpecVal == "1" & DataType == "R", HLNoAtLngt / (HaulDur / 60),
+                                
+                                ifelse(SpecVal == "1" & DataType == "S", (HLNoAtLngt * SubFactor) / (HaulDur / 60),
+                                       
+                                       ifelse(SpecVal == "zeroCatch", 0, NA)
+                                       )
+                                )
+                         )
+         )
+
+# Some rows have multiple rows per combination of length class and haul id (i suppose often because it's split by sex), so we need to sum it up
+hlcod0 |>
+  group_by(LngtClass, haul_id) |>
+  mutate(n = n()) |>
+  ungroup() |>
+  distinct(n)
+
+hlcod0 |>
+  group_by(LngtClass, haul_id) |>
+  mutate(n = n()) |>
+  ungroup() |>
+  filter(n == 2) |>
+  as.data.frame() |>
+  head(5)
+
+hlcodL <- hlcod0 |>
+  group_by(LngtClass, haul_id) |>
+  mutate(CPUEun = sum(CPUEun)) |>
+  ungroup() |>
+  mutate(id3 = paste(haul_id, LngtClass)) |>
+  distinct(id3, .keep_all = TRUE) |>
+  dplyr::select(-id3) # Clean up a bit
+
+# Flounder
+hlfle0 <- hlfle0 |>
+  mutate(CPUEun = ifelse(SpecVal == "1" & DataType == "C", HLNoAtLngt,
+                         
+                         ifelse(SpecVal == "1" & DataType == "R", HLNoAtLngt / (HaulDur / 60),
+                                
+                                ifelse(SpecVal == "1" & DataType == "S", (HLNoAtLngt * SubFactor) / (HaulDur / 60),
+                                       
+                                       ifelse(SpecVal == "zeroCatch", 0, NA)
+                                       )
+
+                                )
+                         )
+         )
+
+# Some rows have multiple rows per combination of length class and haul id (i suppose often because it's split by sex), so we need to sum it up
+hlfle0 |>
+  group_by(LngtClass, haul_id) |>
+  mutate(n = n()) |>
+  ungroup() |>
+  distinct(n)
+
+hlfle0 |>
+  group_by(LngtClass, haul_id) |>
+  mutate(n = n()) |>
+  ungroup() |>
+  filter(n == 2) |>
+  as.data.frame() |>
+  head(5)
+
+hlfleL <- hlfle0 |>
+  group_by(LngtClass, haul_id) |>
+  mutate(CPUEun = sum(CPUEun)) |>
+  ungroup() |>
+  mutate(id3 = paste(haul_id, LngtClass)) |>
+  distinct(id3, .keep_all = TRUE) |>
+  dplyr::select(-id3)
+```
+
+#### Get and add annual weight-length relationships from the CA data so that I can calculate CPUE in biomass rather than numbers further down
+
+```{r lw pars}
+#| message: false
+
+# NOTE! For some species there may not be enough data to have annual LW parameters (!!!)
+
+# Cod
+bits_ca_cod <- bits_ca |>
+  filter(Species == "Gadus morhua") |>
+  mutate(StNo = as.numeric(StNo)) |>
+  mutate(ID = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
+
+# Now I need to copy rows with NoAtLngt > 1 so that 1 row = 1 ind
+bits_ca_cod2 <- bits_ca_cod %>% map_df(., rep, .$CANoAtLngt)
+
+# Standardize length and drop NA weights (need that for condition)
+bits_ca_cod <- bits_ca_cod |>
+  drop_na(IndWgt) |>
+  drop_na(LngtClass) |>
+  filter(IndWgt > 0 & LngtClass > 0) |> # Filter positive length and weight
+  mutate(weight_kg = IndWgt / 1000) |>
+  mutate(length_cm = ifelse(LngtCode == ".",
+                            LngtClass / 10,
+                            LngtClass
+                            )) # Standardize length ((https://vocab.ices.dk/?ref=18))
+
+# Plot
+# ggplot(bits_ca_cod, aes(IndWgt, length_cm)) +
+#   geom_point() +
+#   facet_wrap(~Year)
+
+# Now extract the coefficients for each year (not bothering with outliers at the moment)
+lwCOD <- bits_ca_cod %>% 
+  split(.$Year) |> 
+  purrr::map(~ lm(log(IndWgt) ~ log(length_cm), data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  dplyr::select(Year, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(aL = exp(`(Intercept)`)) |> 
+  dplyr::select(-`(Intercept)`) |> 
+  rename(b = `log(length_cm)`) |> 
+  filter(b > 2 & b < 4) |>
+  filter(aL > 0.00001 & aL < 0.1) |> 
+  mutate(Year = as.numeric(Year))
+
+# Flounder
+bits_ca_fle <- bits_ca |>
+  filter(Species == "Platichthys flesus") |>
+  mutate(StNo = as.numeric(StNo)) |>
+  mutate(ID = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
+
+bits_ca_fle <- bits_ca_fle %>% map_df(., rep, .$CANoAtLngt)
+
+# Standardize length and drop NA weights (need that for condition)
+bits_ca_fle <- bits_ca_fle |>
+  drop_na(IndWgt) |>
+  drop_na(LngtClass) |>
+  filter(IndWgt > 0 & LngtClass > 0) |> # Filter positive length and weight
+  mutate(weight_kg = IndWgt / 1000) |>
+  mutate(length_cm = ifelse(LngtCode == ".",
+                            LngtClass / 10,
+                            LngtClass
+                            )) |> # Standardize length ((https://vocab.ices.dk/?ref=18))
+  mutate(keep = ifelse(LngtCode == "." & Year == 2008, "N", "Y")) |>
+  filter(keep == "Y") |>
+  filter(length_cm < 70)
+
+# Plot
+# ggplot(bits_ca_fle, aes(IndWgt, length_cm, color = LngtCode)) +
+#   geom_point() +
+#   facet_wrap(~Year)
+
+# Now extract the coefficients for each year (not bothering with outliers at the moment)
+lwFLE <- bits_ca_fle %>% 
+  split(.$Year) |> 
+  purrr::map(~ lm(log(IndWgt) ~ log(length_cm), data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  dplyr::select(Year, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(aL = exp(`(Intercept)`)) |> 
+  dplyr::select(-`(Intercept)`) |> 
+  rename(b = `log(length_cm)`) |> 
+  filter(b > 2 & b < 4) |>
+  filter(aL > 0.00001 & aL < 0.1) |> 
+  mutate(Year = as.numeric(Year))
+
+# Join the annual L-W relationships to the respective catch data to calculate CPUE in biomass not abundance
+hlcodL <- left_join(hlcodL, lwCOD, by = "Year")
+hlfleL <- left_join(hlfleL, lwFLE, by = "Year")
+```
+
+#### Convert from CPUE in numbers to $\text{kg/km}^2$
+
+```{r cpue in weight}
+#| message: false
+
+# Cod
+# Standardize length to cm
+hlcodL <- hlcodL |>
+  mutate(length_cm = ifelse(LngtCode == ".", 
+                            LngtClass / 10,
+                            LngtClass
+                            )) # Standardize length ((https://vocab.ices.dk/?ref=18))
+
+# Now check if all rows where length is NA are the ones with zero catch!
+hlcodL |> filter(CPUEun == 0) |> distinct(length_cm)
+hlcodL |> filter(is.na(length_cm)) |> distinct(CPUEun)
+
+# In other words, a zero catch is when the catch is zero and length_cm is NA
+# In order to not get any NA CPUEs in unit biomass because length is NA (I want them instead to be 0, as the numbers-CPUE is), I will replace length_cm == NA with length_cm == 0 before calculating biomass CPUE
+hlcodL <- hlcodL |> mutate(length_cm2 = replace_na(length_cm, 0))
+
+# Calculate weight of catch
+hlcodL <- hlcodL |>
+  mutate(weight_kg = (aL * length_cm2^b) / 1000) |>
+  mutate(CPUEun_kg = weight_kg * CPUEun)
+
+# Plot and check it's correct also in this data
+# ggplot(hlcodL, aes(length_cm2, weight_kg)) +
+#   geom_point() +
+#   facet_wrap(~Year)
+
+
+# Flounder
+# First standardize length to cm and then check how zero-catches are implemented at this stage
+hlfleL <- hlfleL |>
+  mutate(length_cm = ifelse(LngtCode %in% c(".", "0"),
+                            LngtClass / 10,
+                            LngtClass
+                            )) # Standardize length (https://vocab.ices.dk/?ref=18)
+
+# Now check if all rows where length is NA are the ones with zero catch!
+# hlfleL |>
+#   mutate(
+#     length2 = replace_na(length_cm, -9),
+#     no_length = ifelse(length2 < 0, "T", "F")
+#     ) |>
+#   ggplot(aes(length2, CPUEun, color = no_length)) +
+#   geom_point(alpha = 0.2) +
+#   facet_wrap(~no_length)
+
+# hlfleL |>
+#   mutate(length2 = replace_na(length_cm, -9)) |>
+#   group_by(length2) |>
+#   distinct(CPUEun) |>
+#   arrange(CPUEun)
+
+hlfleL <- hlfleL |> mutate(length_cm2 = replace_na(length_cm, 0))
+
+# Standardize length in the haul-data and calculate weight
+hlfleL <- hlfleL |>
+  mutate(weight_kg = (aL * length_cm2^b) / 1000) |>
+  mutate(CPUEun_kg = weight_kg * CPUEun)
+
+# Plot and check it's correct also in this data
+# ggplot(hlfleL, aes(weight_kg, length_cm2)) +
+#   geom_point() +
+#   facet_wrap(~Year)
+
+# Filter unrealistic size
+hlfleL <- hlfleL |> filter(length_cm2 < 400)
+
+# Check
+# t <- hlfleL |> drop_na(CPUEun_kg) # Should not have any NA in biomass-catch
+# t <- hlfleL |> filter(CPUEun_kg == 0) # Should result in a few percent of rows (note this is not proportion of hauls, but rows)
+# t <- hlfleL |> drop_na(length_cm2) # Should be no NA
+```
+
+#### Standardize according to Orio
+To get unit: kg of fish caught by trawling for 1 h a standard bottom swept area of 0.45km2 using a TVL trawl with 75 m sweeps at the standard speed of three knots
+
+```{r standardize}
+#| message: false
+
+# I will calculate a RS and RSA column in the catch data based on Ale's equation in the sweep file:
+# sort(unique(hlcodL2$GroundSpeed))
+# sort(unique(hlcodL2$Fishing.line))
+# sort(unique(hlcodL2$SweepLngt))
+
+# Here I replace all -9 with NA, and then replace those with the mean values...
+
+# First replace -9 in the columns I use for the calculations with NA so I don't end up with real numbers that are wrong!
+hlcodL <- hlcodL |>
+  mutate(
+    GroundSpeed = ifelse(GroundSpeed == -9, NA, GroundSpeed),
+    SweepLngt = ifelse(SweepLngt == -9, NA, SweepLngt),
+    GroundSpeed = ifelse(is.na(GroundSpeed), mean(GroundSpeed, na.rm = TRUE), GroundSpeed),
+    SweepLngt = ifelse(is.na(SweepLngt), mean(SweepLngt, na.rm = TRUE), GroundSpeed)
+  )
+
+hlfleL <- hlfleL |>
+  mutate(
+    GroundSpeed = ifelse(GroundSpeed == -9, NA, GroundSpeed),
+    SweepLngt = ifelse(SweepLngt == -9, NA, SweepLngt),
+    GroundSpeed = ifelse(is.na(GroundSpeed), mean(GroundSpeed, na.rm = TRUE), GroundSpeed),
+    SweepLngt = ifelse(is.na(SweepLngt), mean(SweepLngt, na.rm = TRUE), GroundSpeed)
+  )
+
+# Now calculate correction factors
+hlcodL <- hlcodL |>
+  mutate(
+    RS_x = 3 / GroundSpeed,
+    Horizontal.opening..m. = Fishing.line * 0.67,
+    Swep.one.side..after.formula...meter = 0.258819045 * SweepLngt, # SIN(RADIANS(15))
+    Size.final..m = Horizontal.opening..m. + (Swep.one.side..after.formula...meter * 2),
+    Swept.area = (Size.final..m * 3 * 1860) / 1000000,
+    RSA_x = 0.45388309675081 / Swept.area
+  ) |> 
+  filter(GroundSpeed > 0.1)
+
+hlfleL <- hlfleL |>
+  mutate(
+    RS_x = 3 / GroundSpeed,
+    Horizontal.opening..m. = Fishing.line * 0.67,
+    Swep.one.side..after.formula...meter = 0.258819045 * SweepLngt, # SIN(RADIANS(15))
+    Size.final..m = Horizontal.opening..m. + (Swep.one.side..after.formula...meter * 2),
+    Swept.area = (Size.final..m * 3 * 1860) / 1000000,
+    RSA_x = 0.45388309675081 / Swept.area
+  ) |> 
+  filter(GroundSpeed > 0.1)
+
+# Standardize!
+hlcodL <- hlcodL |>
+  mutate(
+    CPUEst_kg = CPUEun_kg * RS_x * RSA_x,
+    CPUEst = CPUEun * RS_x * RSA_x
+  )
+
+hlfleL <- hlfleL |>
+  mutate(
+    CPUEst_kg = CPUEun_kg * RS_x * RSA_x,
+    CPUEst = CPUEun * RS_x * RSA_x
+  )
+
+
+# Cod
+hlcodL <- hlcodL |>
+  mutate(
+    biomass_density = CPUEst_kg / 0.45,
+    density = CPUEst / 0.45,
+  )
+
+# Flounder
+hlfleL <- hlfleL |>
+  mutate(
+    biomass_density = CPUEst_kg / 0.45,
+    density = CPUEst / 0.45,
+  )
+```
+
+## Save data
+
+```{r}
+#| message: false
+
+# Rename columns and select specific columns from the cod data
+# Cod
+datcod <- hlcodL |>
+  dplyr::select(density, biomass_density, Year, Species, ShootLat, ShootLong, Quarter, 
+                Month, Day, date, haul_id, ices_rect, sub_div, length_cm2) |>
+  janitor::clean_names() |> 
+  rename(
+    lat = shoot_lat,
+    lon = shoot_long,
+    length_class = length_cm2
+  ) |> 
+  mutate(source = "DATRAS",
+         length_class = ifelse(length_class == 0, NA, length_class))
+
+# Flounder
+datfle <- hlfleL |>
+  dplyr::select(density, biomass_density, Year, Species, ShootLat, ShootLong, Quarter,
+                Month, Day, date, haul_id, ices_rect, sub_div, length_cm2) |>
+  janitor::clean_names() |> 
+  rename(
+    lat = shoot_lat,
+    lon = shoot_long,
+    length_class = length_cm2
+  ) |> 
+  mutate(source = "DATRAS",
+         length_class = ifelse(length_class == 0, NA, length_class))
+
+write_csv(datcod, paste0(home, "/output/cod_cpue_length.csv"))
+write_csv(datfle, paste0(home, "/output/cod_cpue_length.csv"))
+```
+
+```{r}
+#| message: false
+
+historical <- read_csv(paste0(home, "/output/cod_cpue_length_historical.csv")) |> 
+  filter(year >= 1993) |> 
+  filter(source == "datras") |> 
+  filter(sub_div %in% c(24, 25, 26, 27, 28)) |> 
+  summarise(mean = median(biomass_density), .by = c(sub_div, year, quarter)) |> 
+  mutate(version = "historical")
+
+new <- datcod |> 
+  filter(sub_div %in% c(24, 25, 26, 27, 28)) |> 
+  summarise(mean = median(biomass_density), .by = c(sub_div, year, quarter)) |> 
+  mutate(version = "new")
+
+dd <- bind_rows(historical, new)
+
+dd |>
+  filter(year > 2010) |> 
+  ggplot(aes(year, mean, color = version)) +
+  geom_point() +
+  geom_line() + 
+  facet_grid(quarter~sub_div)
+
+# The differences between the series can largely be explain by 1) using different standardisation factors and 2) length-weight parameters, because I see smaller differences when I use the raw, unstandardised count cpue (not included currently in the data files)
+```
+
