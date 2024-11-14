@@ -577,26 +577,35 @@ write_csv(datfle, paste0(home, "/output/cod_cpue_length.csv"))
 ```{r}
 #| message: false
 
+condition <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/cod_condition/master/data/for_analysis/catch_q_1_4.csv") |>
+  mutate(sub_div = as.factor(sub_div)) |> 
+  filter(year >= 1993) |> 
+  filter(sub_div %in% c(24, 25, 26, 27, 28)) |> 
+  summarise(mean = median(density), .by = c(sub_div, year, quarter)) |> 
+  mutate(version = "condition")
+
 historical <- read_csv(paste0(home, "/output/cod_cpue_length_historical.csv")) |> 
   filter(year >= 1993) |> 
   filter(source == "datras") |> 
-  filter(sub_div %in% c(24, 25, 26, 27, 28)) |> 
-  summarise(mean = median(biomass_density), .by = c(sub_div, year, quarter)) |> 
+  filter(sub_div %in% c(24, 25, 26, 27, 28)) |>
+  summarise(sum = sum(biomass_density), .by = c(haul_id, sub_div, year, quarter)) |> 
+  summarise(mean = median(sum), .by = c(sub_div, year, quarter)) |> 
   mutate(version = "historical")
 
 new <- datcod |> 
   filter(sub_div %in% c(24, 25, 26, 27, 28)) |> 
-  summarise(mean = median(biomass_density), .by = c(sub_div, year, quarter)) |> 
+  summarise(sum = sum(biomass_density), .by = c(haul_id, sub_div, year, quarter)) |> 
+  summarise(mean = median(sum), .by = c(sub_div, year, quarter)) |> 
   mutate(version = "new")
 
-dd <- bind_rows(historical, new)
+dd <- bind_rows(historical, new, condition)
 
 dd |>
   filter(year > 2010) |> 
   ggplot(aes(year, mean, color = version)) +
   geom_point() +
   geom_line() + 
-  facet_grid(quarter~sub_div)
+  ggh4x::facet_grid2(quarter~sub_div, independent = "y", scales = "free")
 
 # The differences between the series can largely be explain by 1) using different standardisation factors and 2) length-weight parameters, because I see smaller differences when I use the raw, unstandardised count cpue (not included currently in the data files)
 ```

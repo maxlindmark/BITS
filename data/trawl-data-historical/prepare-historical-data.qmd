@@ -1,0 +1,2660 @@
+---
+title: "Collate historical data 1978--1993"
+author: "Max Lindmark"
+date: today
+date-format: iso
+toc: true
+format: 
+  html:
+    page-layout: full
+    embed-resources: true
+knitr: 
+  opts_chunk:
+    fig.align: center
+    out-width: 100%
+editor: source
+---
+
+This script reads code and data collated by Orio et al around 2017 for his PhD thesis on CPUE from various national surveys prior to DATRAS and the later gear homogenization (around 2010). I have here copied this code and put it in chunks more or less as is! I have trimmed it in places and added species. I have removed the pelagic species because I won't use the catch information, and there is no biological information ("CA") that is not on DATRAS (historical Swedish and Latvian data is focused on cod and flounder). The script saves CA data for cod and flounder in the `output` folder for cod and flounder but not the other species because if I need those I'll take them directly from DATRAS. I have added dab and turbot to Ale´s script, although I'm not sure we can say anything meaningful about the distribution of these species in the Baltic because it's pretty limited as is with catches in the Eastern Baltic Sea. If one is interested to add more species that could be relevant for the western baltic sea. But note we do not have havey any CA data that is not already on DATRAS, and catches are likely pretty low of those anyway. 
+
+I have also kept the original folder structure. The original script is "standardization_database.R", which is available on the SLU server together with data (and in this repo). The code could be adapted to include more species. Currently it's set up more a few species but ultimate we work up only cod and flounder (which was the focus of Ale's work). We have communicated with the Latvians (April 15th 2024) and have approval to re-use the data (even if we strictly do not need the approval...).
+
+This first chunk reads in Swedish historical data and data from Fiskdata2 (internal database). It returns an object called DataStuart, with standardized CPUE in numbers (CPUEst).
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(maptools)
+library(lubridate)
+# install.packages("maptools", repos = "https:/packagemanager.posit.co/cran/2023-10-13")
+# install.packages('DATRAS',repos='http:/www.rforge.net/',type='source')
+library(DATRAS)
+library(doBy)
+library(raster)
+library(forcats)
+library(readr)
+library(tidylog)
+```
+
+```{r swedish historical and fd2}
+####### standardization of trawl survey database
+
+# From Alessandro Orios PhD work
+# Updated and adapted by Max 2024.05.15.
+# Minimal changes to script, just updates to make it run
+
+####### Swedish historical data
+####### load historical data
+
+home <- here::here()
+
+stand <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Raw.csv"),sep=";",fileEncoding="windows-1252")
+stand_un <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/stand_un.csv"),sep=";",fileEncoding="windows-1252")
+
+##### create the index with date as well since there is a case in which the haul number is the same
+stand_un$idx<-paste(stand_un$IDX_SSB,stand_un$datum,sep=".")
+stand$idx<-paste(stand$IDX_SSB,stand$datum,sep=".")
+
+##### remove pelagic trawl
+
+stand <- stand[!stand$idx %in% stand_un$idx[stand_un$type=="pel"],]
+
+stand_un <- stand_un[!stand_un$type=="pel",]
+
+# Which species are in the historical data?
+stand |> 
+  summarise(n = n(), .by = art) |> 
+  arrange(desc(n))
+
+##### create a dataset for each species valid historic hauls 
+
+
+##### select hauls with wrong information
+# ML: This refers to hauls with a total weight only. Add this indicator column to the new species I've added (whiting and dab)
+# For now, I will just indicate if there's no lenght and count information
+
+stand <- stand |>
+  mutate(DAB = ifelse((is.na(lŠngd) | is.na(antal)) & art == "SandskŠdda", "no", ""),
+         TUR = ifelse((is.na(lŠngd) | is.na(antal)) & art == "Piggvar", "no", ""),
+         WHI = ifelse((is.na(lŠngd) | is.na(antal)) & art == "Vitling", "no", ""))
+
+nocod <- stand |>
+  dplyr::select(IDX_SSB,COD,FLO,PLA,DAB,TUR,WHI) |>
+  filter(COD=="no")
+
+noflo <- stand |>
+  dplyr::select(IDX_SSB,COD,FLO,PLA,DAB,TUR,WHI) |>
+  filter(FLO=="no")
+
+nopla <- stand |>
+  dplyr::select(IDX_SSB,COD,FLO,PLA,DAB,TUR,WHI) |>
+  filter(PLA=="no")
+
+nodab <- stand |>
+  dplyr::select(IDX_SSB,COD,FLO,PLA,DAB,TUR,WHI) |>
+  filter(DAB=="no")
+
+notur <- stand |>
+  dplyr::select(IDX_SSB,COD,FLO,PLA,DAB,TUR,WHI) |>
+  filter(TUR=="no")
+
+nowhi <- stand |>
+  dplyr::select(IDX_SSB,COD,FLO,PLA,DAB,TUR,WHI) |>
+  filter(WHI=="no")
+
+
+###### take just valid hauls ( for herring and sprat just the hauls with catch)
+
+codhist <-stand |>
+  filter(art=="Torsk") %>%
+  merge(x = .,stand_un,by = intersect(names(.), names(stand_un)), all = TRUE) |> #### add 0 hauls
+  mutate(COD = ifelse(is.na(COD), 0,COD)) |>
+  filter(!IDX_SSB %in% nocod$IDX_SSB)  |> ##### remove invalid hauls
+  mutate(art = "Gadus morhua") 
+summary(codhist)  
+
+flohist <-stand |>
+  filter(art=="Skrubbskädda") %>%
+  merge(x = .,stand_un,by = intersect(names(.), names(stand_un)), all = TRUE) |>
+  mutate(FLO = ifelse(is.na(FLO), 0,FLO)) |>
+  filter(!IDX_SSB %in% noflo$IDX_SSB)  |>
+  mutate(art = "Platichthys flesus")
+summary(flohist)  
+
+plahist <-stand |>
+  filter(art=="Rödspätta") %>%
+  merge(x = .,stand_un,by = intersect(names(.), names(stand_un)), all = TRUE) |>
+  mutate(PLA = ifelse(is.na(PLA), 0,PLA)) |>
+  filter(!IDX_SSB %in% nopla$IDX_SSB)  |>
+  mutate(art = "Pleuronectes platessa")
+summary(plahist)  
+
+# NOTE! ML added dab, whiting, and turbot
+dabhist <-stand |>
+  filter(art=="SandskŠdda") %>%
+  merge(x = .,stand_un,by = intersect(names(.), names(stand_un)), all = TRUE) |>
+  mutate(DAB = ifelse(is.na(DAB), 0,DAB)) |>
+  filter(!IDX_SSB %in% nopla$IDX_SSB)  |>
+  mutate(art = "Limanda limanda")
+summary(dabhist)  
+
+turhist <-stand |>
+  filter(art=="Piggvar") %>%
+  merge(x = .,stand_un,by = intersect(names(.), names(stand_un)), all = TRUE) |>
+  mutate(TUR = ifelse(is.na(TUR), 0,TUR)) |>
+  filter(!IDX_SSB %in% nopla$IDX_SSB)  |>
+  mutate(art = "Psetta maxima")
+summary(turhist)  
+
+whihist <-stand |>
+  filter(art=="Vitling") %>%
+  merge(x = .,stand_un,by = intersect(names(.), names(stand_un)), all = TRUE) |>
+  mutate(WHI = ifelse(is.na(WHI), 0,WHI)) |>
+  filter(!IDX_SSB %in% nopla$IDX_SSB)  |>
+  mutate(art = "Merlangius merlangus")
+summary(turhist)  
+######## change NAs in CPUEs with 0s
+
+codhist$CPUEantal[is.na(codhist$CPUEantal)] <- 0
+flohist$CPUEantal[is.na(flohist$CPUEantal)] <- 0
+plahist$CPUEantal[is.na(plahist$CPUEantal)] <- 0
+dabhist$CPUEantal[is.na(dabhist$CPUEantal)] <- 0
+turhist$CPUEantal[is.na(turhist$CPUEantal)] <- 0
+whihist$CPUEantal[is.na(whihist$CPUEantal)] <- 0
+
+######### Fiskdata2
+
+#### load data up to 2014
+# NOTE: Ale does this in two steps (cod and cod1, e.g., because he updated the data. I only need to extract once)
+index <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/Research Östersjön 2.csv"),sep=";",fileEncoding="windows-1252")
+cod <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawlsurv_zincl_l_COD.csv"),sep=";",fileEncoding="windows-1252")
+flounder <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawlsurv_zincl_l_FLOUNDER.csv"),sep=";",fileEncoding="windows-1252")
+plaice <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawlsurv_zincl_l_PLAICE.csv"),sep=";",fileEncoding="windows-1252")
+
+#### load data for 2015-16
+index1 <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/Research Östersjön 3.csv"),sep=";",fileEncoding="windows-1252")
+cod1 <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawl_surveys_zincl_(l)BITSCOD.csv"),sep=";",fileEncoding="windows-1252")
+flounder1 <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawl_surveys_zincl_(l)BITSFLOUNDER.csv"),sep=";",fileEncoding="windows-1252")
+plaice1 <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawl_surveys_zincl_(l)BITSPLAICE.csv"),sep=";",fileEncoding="windows-1252")
+
+#### make them equal
+
+cod1$Subdivision <- factor(cod1$Subdivision)
+flounder1$Subdivision <- factor(flounder1$Subdivision)
+plaice1$Subdivision <- factor(plaice1$Subdivision)
+
+###### merge them
+index<- rbind(index[,-1],index1)
+cod<- rbind(cod[,-32],cod1[,-1])
+flounder<- rbind(flounder,flounder1[,-1])
+plaice<- rbind(plaice,plaice1[,-1])
+
+# TODO: Here I'd need to add my species, then I'd need to download these from fiskdata2
+# TODO: currently only did dab: Trawl Surveys Zincl (L), then BITS, from years 1979 -> 2014, but now (read 2024 compared to 2017) they seem to have different column names (same but small difference, hence the renaming)
+dab <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawlsurv_zincl_l_DAB.csv"),sep=";",fileEncoding="windows-1252") |> 
+  rename(Appr. = Appr..status,
+         Validity..haul. = Validity,
+         Seq..no. = Seqno,
+         Subsample = Subsam,
+         Rect. = Rect,
+         Lon. = Long,
+         Lat. = Lat,
+         Depth = Bottom.depth..m.,
+         Subdivision = Subdiv,
+         Dist. = Dist...Nm.,
+         Doorspread = Doorspread..m.,
+         Tot.No..hour = Tot..no..hour,
+         Duration = Duration..min.,
+         Opening = Opening..m.,
+         Headropedepth = Headropedepth..m.,
+         Swept.area..km...h = Swept.area..km2.,
+         Lengthcl = Lengthcl...mm.) |> 
+  mutate(Grade = NA,
+         Mean.weight = NA,
+         No..hour = as.numeric(No..hour)) |> 
+  dplyr::select(names(cod))
+
+turbot <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawlsurv_zincl_l_TURBOT.csv"),sep=";",fileEncoding="windows-1252") |> 
+  rename(Appr. = Appr..status,
+         Validity..haul. = Validity,
+         Seq..no. = Seqno,
+         Subsample = Subsam,
+         Rect. = Rect,
+         Lon. = Long,
+         Lat. = Lat,
+         Depth = Bottom.depth..m.,
+         Subdivision = Subdiv,
+         Dist. = Dist...Nm.,
+         Doorspread = Doorspread..m.,
+         Tot.No..hour = Tot..no..hour,
+         Duration = Duration..min.,
+         Opening = Opening..m.,
+         Headropedepth = Headropedepth..m.,
+         Swept.area..km...h = Swept.area..km2.,
+         Lengthcl = Lengthcl...mm.) |> 
+  mutate(Grade = NA,
+         Mean.weight = NA,
+         No..hour = as.numeric(No..hour)) |> 
+  dplyr::select(names(cod))
+
+whiting <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawlsurv_zincl_l_WHITING.csv"),sep=";",fileEncoding="windows-1252") |> 
+    rename(Appr. = Appr..status,
+           Validity..haul. = Validity,
+           Seq..no. = Seqno,
+           Subsample = Subsam,
+           Rect. = Rect,
+           Lon. = Long,
+           Lat. = Lat,
+           Depth = Bottom.depth..m.,
+           Subdivision = Subdiv,
+           Dist. = Dist...Nm.,
+           Doorspread = Doorspread..m.,
+           Tot.No..hour = Tot..no..hour,
+           Duration = Duration..min.,
+           Opening = Opening..m.,
+           Headropedepth = Headropedepth..m.,
+           Swept.area..km...h = Swept.area..km2.,
+           Lengthcl = Lengthcl...mm.) |> 
+  mutate(Grade = NA,
+         Mean.weight = NA,
+         No..hour = as.numeric(No..hour)) |> 
+  dplyr::select(names(cod))
+
+
+summary(index)
+summary(cod)
+summary(flounder)
+summary(plaice)
+summary(dab)
+summary(turbot)
+summary(whiting)
+
+
+###### change length in cm
+
+cod$Lengthcl <- cod$Lengthcl/10
+flounder$Lengthcl <- flounder$Lengthcl/10
+plaice$Lengthcl <- plaice$Lengthcl/10
+dab$Lengthcl <- dab$Lengthcl/10
+turbot$Lengthcl <- turbot$Lengthcl/10
+whiting$Lengthcl <- whiting$Lengthcl/10
+
+
+####### Add species name
+
+cod$species <- "cod"
+flounder$species <- "flounder"
+plaice$species <- "plaice"
+dab$species <- "dab"
+turbot$species <- "turbot"
+whiting$species <- "whiting"
+
+
+#### remove SD21
+# ML did not do this! Filtering later...
+# cod <- cod[!cod$Subdivision==21,]
+# flounder <- flounder[!flounder$Subdivision==21,]
+# herring <- herring[!herring$Subdivision==21,]
+# sprat <- sprat[!sprat$Subdivision==21,]
+# plaice <- plaice[!plaice$Subdivision==21,]
+
+
+###### create a new index with the date as well
+
+index <- cbind(index, do.call("rbind", strsplit(as.character(index$STA_FROMDATETIME), " ")))
+index$idx<-paste(index$index,index$"1",sep=".")
+
+cod$idx<-paste(cod$Index,cod$Date,sep=".")
+flounder$idx<-paste(flounder$Index,flounder$Date,sep=".")
+plaice$idx<-paste(plaice$Index,plaice$Date,sep=".")
+dab$idx<-paste(dab$Index,dab$Date,sep=".")
+turbot$idx<-paste(turbot$Index,turbot$Date,sep=".")
+whiting$idx<-paste(whiting$Index,turbot$Date,sep=".")
+
+index$idx <- factor(index$idx)
+cod$idx <- factor(cod$idx)
+flounder$idx <- factor(flounder$idx)
+plaice$idx <- factor(plaice$idx)
+dab$idx <- factor(dab$idx)
+turbot$idx <- factor(turbot$idx)
+whiting$idx <- factor(whiting$idx)
+
+
+##### merge
+
+codT<-merge(index,cod, by="idx", all.y=T)
+flounderT<-merge(index,flounder, by="idx", all.y=T)
+plaiceT<-merge(index,plaice, by="idx", all.y=T)
+dabT<-merge(index,dab, by="idx", all.y=T)
+turbotT<-merge(index,turbot, by="idx", all.y=T)
+whitingT<-merge(index,whiting, by="idx", all.y=T)
+
+
+##### select just OTB
+
+codT <- codT[codT$REDSKENG=="OTB Otter trawl bottom",]
+flounderT <- flounderT[flounderT$REDSKENG=="OTB Otter trawl bottom",]
+plaiceT <- plaiceT[plaiceT$REDSKENG=="OTB Otter trawl bottom",]
+dabT <- dabT[dabT$REDSKENG=="OTB Otter trawl bottom",]
+turbotT <- turbotT[turbotT$REDSKENG=="OTB Otter trawl bottom",]
+whitingT <- whitingT[whitingT$REDSKENG=="OTB Otter trawl bottom",]
+
+index <- index[index$REDSKENG=="OTB Otter trawl bottom",]
+
+##### remove invalid and calibration hauls
+
+type <-c("I","C")
+type2 <-c("Invalid","Calibration")
+
+
+codT <- codT[!codT$Validity..haul. %in% type,]
+flounderT <- flounderT[!flounderT$Validity..haul. %in% type,]
+plaiceT <- plaiceT[!plaiceT$Validity..haul. %in% type,]
+dabT <- plaiceT[!dabT$Validity..haul. %in% type,]
+turbotT <- turbotT[!turbotT$Validity..haul. %in% type,]
+whitingT <- whitingT[!whitingT$Validity..haul. %in% type,]
+index <- index[!index$STAVALCODE_DESCENG %in% type2,]
+
+##### remove hauls of tvl with sweep  25 and 50
+
+wrongsweep <- index |>
+  filter(STA_SWEEPLENGTH <=59 & GEARMOD_NAMEENG=="TV3 BOTTOM TRAWL FOR COD 930 MESH" & STAVALCODE_DESCENG=="Valid")
+
+index <- index[!index$idx %in% wrongsweep$idx,]
+codT <- codT[!codT$idx %in% wrongsweep$idx,]
+flounderT <- flounderT[!flounderT$idx %in% wrongsweep$idx,]
+plaiceT <- plaiceT[!plaiceT$idx %in% wrongsweep$idx,]
+dabT <- dabT[!dabT$idx %in% wrongsweep$idx,]
+turbotT <- turbotT[!turbotT$idx %in% wrongsweep$idx,]
+whitingT <- whitingT[!whitingT$idx %in% wrongsweep$idx,]
+
+summary(codT)
+summary(flounderT)
+summary(plaiceT)
+summary(dabT)
+summary(turbotT)
+summary(whitingT)
+
+
+###### remove hauls for which we know they have fished the species but we don't have LFD
+
+codinvalid <- codT |>
+  filter(is.na(No..hour) & is.na(Lengthcl)) |>
+  filter(!(is.na(Tot.No..hour) & is.na(Kg.hour))) |>
+  filter(!is.na(Kg.hour))
+
+codT <- codT[!codT$idx %in% codinvalid$idx,]
+
+flounderinvalid <- flounderT |>
+  filter(is.na(No..hour) & is.na(Lengthcl)) |>
+  filter(!(is.na(Tot.No..hour) & is.na(Kg.hour)))
+
+flounderT <- flounderT[!flounderT$idx %in% flounderinvalid$idx,]
+
+plaiceinvalid <- plaiceT |>
+  filter(is.na(No..hour) & is.na(Lengthcl)) |>
+  filter(!(is.na(Tot.No..hour) & is.na(Kg.hour))) 
+
+plaiceT <- plaiceT[!plaiceT$idx %in% plaiceinvalid$idx,]
+
+dabinvalid <- dabT |>
+  filter(is.na(No..hour) & is.na(Lengthcl)) |>
+  filter(!(is.na(Tot.No..hour) & is.na(Kg.hour))) 
+
+dabT <- dabT[!dabT$idx %in% dabinvalid$idx,]
+
+turbotinvalid <- turbotT |>
+  filter(is.na(No..hour) & is.na(Lengthcl)) |>
+  filter(!(is.na(Tot.No..hour) & is.na(Kg.hour))) 
+
+turbotT <- turbotT[!turbotT$idx %in% turbotinvalid$idx,]
+
+whitinginvalid <- whitingT |>
+  filter(is.na(No..hour) & is.na(Lengthcl)) |>
+  filter(!(is.na(Tot.No..hour) & is.na(Kg.hour))) 
+
+whitingT <- whitingT[!whitingT$idx %in% whitinginvalid$idx,]
+
+######### change NA in No..hour to 0
+
+codT$No..hour[is.na(codT$No..hour)] <- 0
+flounderT$No..hour[is.na(flounderT$No..hour)] <- 0
+plaiceT$No..hour[is.na(plaiceT$No..hour)] <- 0
+dabT$No..hour[is.na(dabT$No..hour)] <- 0
+turbotT$No..hour[is.na(turbotT$No..hour)] <- 0
+whitingT$No..hour[is.na(whitingT$No..hour)] <- 0
+
+###### create a dataset with only the hauls with 0 catches
+
+cod0<-codT[is.na(codT$Lengthcl),]
+flounder0<-flounderT[is.na(flounderT$Lengthcl),]
+plaice0<-plaiceT[is.na(plaiceT$Lengthcl),]
+dab0<-dabT[is.na(dabT$Lengthcl),]
+turbot0<-turbotT[is.na(turbotT$Lengthcl),]
+whiting0<-whitingT[is.na(whitingT$Lengthcl),]
+
+
+
+
+
+###### merge historical swedish data with fiskdata2
+
+historical_idx<-stand_un[,c("Fartyg" , "drag","datum","år" ,"mån","årstid","tråltid" , "område"  ,"distans","speed","idx", "LATDD" , "LONGDD" ,"Depth", "Size.final..m." , "Size.final..foot." ,"Horizontal.opening..m." , "Fishing.line..foot." ,"Swep.both.side..after.formula...meter.", "Swep.both.side..after.formula...foot.","Swep.both.side..foot.","Swept.area","RSA","RS")]                   
+
+names(historical_idx)<-c("vessel" , "haul","date","year" ,"month","quarter","trawl_time" , "SD"  ,"distans","speed","IDX", "LATDD" ,"LONGDD" ,"Depth", "Size.final..m." , "Size.final..foot." ,"Horizontal.opening..m." , "Fishing.line..foot." ,"Swep.both.side..after.formula...meter.", "Swep.both.side..after.formula...foot.","Swep.both.side..foot.","Swept.area","RSA","RS")
+
+
+fiskdata2_idx<-index[,c("VESS_NAME" ,"1","FROMYEAR" ,"STA_DURATION" , "STA_SUBDIV_SUBDIV"  ,"STA_DIST","STA_SPEED","idx", "STAVALCODE_DESCENG","LATDD" , "LONGDD" ,"STA_BOTAVG", "Size.final..m." , "Size.final..foot." ,"Horizontal.opening..m." , "Fishing.line..foot." ,"Swep.both.side..after.formula...meter.", "Swep.both.side..after.formula...foot.","sweep.both.sides..foot.","Swept.area","RSA","RS")]   
+
+names(fiskdata2_idx)<-c("vessel" , "date","year" ,"trawl_time" , "SD"  ,"distans","speed","IDX","validity", "LATDD" ,"LONGDD" ,"Depth", "Size.final..m." , "Size.final..foot." ,"Horizontal.opening..m." , "Fishing.line..foot." ,"Swep.both.side..after.formula...meter.", "Swep.both.side..after.formula...foot.","Swep.both.side..foot.","Swept.area","RSA","RS")
+
+
+survey_idx <- merge(historical_idx,fiskdata2_idx,all=T)
+
+summary(survey_idx)
+
+
+
+####### fix SD and ICES rect
+
+
+##### RECT
+xx <- shapefile(paste0(here::here(), "/ICES_StatRec_mapto_ICES_Areas/StatRec_map_Areas_Full_20170124.shp"))
+
+
+##### match ICES rect
+pts <- SpatialPoints(cbind(survey_idx$LONGDD, survey_idx$LATDD), 
+                     proj4string = CRS(proj4string(xx)))
+
+survey_idx$SD <- over(pts, xx)$Area_27
+
+survey_idx <- survey_idx |> 
+  mutate(SD = factor(SD),
+         SD = fct_recode(SD,
+                         "20" = "3.a.20",
+                         "21" = "3.a.21",
+                         "22" = "3.c.22",
+                         "23" = "3.b.23",
+                         "24" = "3.d.24",
+                         "25" = "3.d.25",
+                         "26" = "3.d.26",
+                         "27" = "3.d.27",
+                         "28" = "3.d.28.1",
+                         "28" = "3.d.28.2",
+                         "29" = "3.d.29"))
+
+survey_idx$Rect <- mapplots::ices.rect2(survey_idx$LONGDD, survey_idx$LATDD)
+
+
+##### cod
+names(codT)
+codTStuart<-codT[,c("VESS_NAME" ,"1","FROMYEAR" ,"STA_DURATION" , "STA_SUBDIV_SUBDIV" ,"STA_ICESRECT_RUTA" ,"STA_SPEED","idx", "STAVALCODE_DESCENG","LATDD" , "LONGDD" ,"STA_BOTAVG","Lengthcl","No..hour","RSA","RS")] 
+
+names(codTStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD" ,"Rect" ,"speed","IDX","validity", "LATDD" ,"LONGDD" ,"Depth","Lengthcl","CPUEun","RSA","RS")
+summary(codTStuart)
+
+names(codhist)
+
+codhistStuart<-codhist[,c("Fartyg" , "datum","år","tråltid", "område"  ,"speed","idx", "LATDD" , "LONGDD" ,"Depth","art","lŠngd","CPUEantal", "RSA","RS")]                   
+
+names(codhistStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD"  ,"speed","IDX", "LATDD" ,"LONGDD" ,"Depth","species","Lengthcl","CPUEun" ,"RSA","RS")
+summary(codhistStuart)
+
+
+Totcod <- merge(codhistStuart,codTStuart,all=T)
+Totcod$species <- "Gadus morhua"
+summary(Totcod)
+
+
+##### flounder
+names(flounderT)
+flounderTStuart<-flounderT[,c("VESS_NAME" ,"1","FROMYEAR" ,"STA_DURATION" , "STA_SUBDIV_SUBDIV" ,"STA_ICESRECT_RUTA" ,"STA_SPEED","idx", "STAVALCODE_DESCENG","LATDD" , "LONGDD" ,"STA_BOTAVG","Lengthcl","No..hour","RSA","RS")] 
+
+names(flounderTStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD" ,"Rect" ,"speed","IDX","validity", "LATDD" ,"LONGDD" ,"Depth","Lengthcl","CPUEun","RSA","RS")
+summary(flounderTStuart)
+
+names(flohist)
+
+flohistStuart<-flohist[,c("Fartyg" , "datum","år" ,"tråltid" , "område"  ,"speed","idx", "LATDD" , "LONGDD" ,"Depth","art","lŠngd","CPUEantal" , "RSA","RS")]                   
+
+names(flohistStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD"  ,"speed","IDX", "LATDD" ,"LONGDD" ,"Depth","species","Lengthcl","CPUEun" ,"RSA","RS")
+summary(flohistStuart)
+
+
+Totflo <- merge(flohistStuart,flounderTStuart,all=T)
+Totflo$species <- "Platichthys flesus"
+summary(Totflo)
+
+
+##### plaice
+names(plaiceT)
+plaiceTStuart<-plaiceT[,c("VESS_NAME" ,"1","FROMYEAR" ,"STA_DURATION" , "STA_SUBDIV_SUBDIV" ,"STA_ICESRECT_RUTA" ,"STA_SPEED","idx", "STAVALCODE_DESCENG","LATDD" , "LONGDD" ,"STA_BOTAVG","Lengthcl","No..hour","RSA","RS")] 
+
+names(plaiceTStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD" ,"Rect" ,"speed","IDX","validity", "LATDD" ,"LONGDD" ,"Depth","Lengthcl","CPUEun","RSA","RS")
+summary(plaiceTStuart)
+
+sort(names(plahist))
+
+plahistStuart<-plahist[,c("Fartyg" , "datum","Œr" ,"tråltid" , "område"  ,"speed","idx", "LATDD" , "LONGDD" ,"Depth","art","lŠngd","CPUEantal" , "RSA","RS")]                   
+
+names(plahistStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD"  ,"speed","IDX", "LATDD" ,"LONGDD" ,"Depth","species","Lengthcl","CPUEun" ,"RSA","RS")
+summary(plahistStuart)
+
+
+Totpla <- merge(plahistStuart,plaiceTStuart,all=T)
+Totpla$species <- "Pleuronectes platessa"
+summary(Totpla)
+
+
+##### dab
+names(dabT)
+dabTStuart<-dabT[,c("VESS_NAME" ,"1","FROMYEAR" ,"STA_DURATION" , "STA_SUBDIV_SUBDIV" ,"STA_ICESRECT_RUTA" ,"STA_SPEED","idx", "STAVALCODE_DESCENG","LATDD" , "LONGDD" ,"STA_BOTAVG","Lengthcl","No..hour","RSA","RS")] 
+
+names(dabTStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD" ,"Rect" ,"speed","IDX","validity", "LATDD" ,"LONGDD" ,"Depth","Lengthcl","CPUEun","RSA","RS")
+summary(dabTStuart)
+
+sort(names(dabhist))
+
+dabhistStuart<-plahist[,c("Fartyg" , "datum","Œr" ,"tråltid" , "område"  ,"speed","idx", "LATDD" , "LONGDD" ,"Depth","art","lŠngd","CPUEantal" , "RSA","RS")]                   
+
+names(dabhistStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD"  ,"speed","IDX", "LATDD" ,"LONGDD" ,"Depth","species","Lengthcl","CPUEun" ,"RSA","RS")
+summary(dabhistStuart)
+
+
+Totdab <- merge(dabhistStuart,dabTStuart,all=T)
+Totdab$species <- "Limanda limanda"
+summary(Totdab)
+
+
+##### Turbot
+names(turbotT)
+turbotTStuart<-turbotT[,c("VESS_NAME" ,"1","FROMYEAR" ,"STA_DURATION" , "STA_SUBDIV_SUBDIV" ,"STA_ICESRECT_RUTA" ,"STA_SPEED","idx", "STAVALCODE_DESCENG","LATDD" , "LONGDD" ,"STA_BOTAVG","Lengthcl","No..hour","RSA","RS")] 
+
+names(turbotTStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD" ,"Rect" ,"speed","IDX","validity", "LATDD" ,"LONGDD" ,"Depth","Lengthcl","CPUEun","RSA","RS")
+summary(turbotTStuart)
+
+sort(names(turhist))
+
+turhistStuart<-turhist[,c("Fartyg" , "datum","Œr" ,"tråltid" , "område"  ,"speed","idx", "LATDD" , "LONGDD" ,"Depth","art","lŠngd","CPUEantal" , "RSA","RS")]                   
+
+names(turhistStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD"  ,"speed","IDX", "LATDD" ,"LONGDD" ,"Depth","species","Lengthcl","CPUEun" ,"RSA","RS")
+summary(turhistStuart)
+
+
+Tottur <- merge(turhistStuart,turbotTStuart,all=T)
+Tottur$species <- "Psetta maxima"
+summary(Tottur)
+
+
+##### Whiting
+names(whitingT)
+whitingTStuart<-whitingT[,c("VESS_NAME" ,"1","FROMYEAR" ,"STA_DURATION" , "STA_SUBDIV_SUBDIV" ,"STA_ICESRECT_RUTA" ,"STA_SPEED","idx", "STAVALCODE_DESCENG","LATDD" , "LONGDD" ,"STA_BOTAVG","Lengthcl","No..hour","RSA","RS")] 
+
+names(whitingTStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD" ,"Rect" ,"speed","IDX","validity", "LATDD" ,"LONGDD" ,"Depth","Lengthcl","CPUEun","RSA","RS")
+summary(whitingTStuart)
+
+sort(names(whihist))
+
+whihistStuart<-whihist[,c("Fartyg" , "datum","Œr" ,"tråltid" , "område"  ,"speed","idx", "LATDD" , "LONGDD" ,"Depth","art","lŠngd","CPUEantal" , "RSA","RS")]                   
+
+names(whihistStuart)<-c("vessel" , "date","year" ,"trawl_time" , "SD"  ,"speed","IDX", "LATDD" ,"LONGDD" ,"Depth","species","Lengthcl","CPUEun" ,"RSA","RS")
+summary(whihistStuart)
+
+
+Totwhi <- merge(whihistStuart,whitingTStuart,all=T)
+Totwhi$species <- "Merlangius merlangus"
+summary(Totwhi)
+
+###### merge all species
+
+DataStuart <- rbind(Totcod,Totflo,Totpla,Totdab,Tottur, Totwhi)
+
+DataStuart <- DataStuart |> 
+  mutate(year = replace_na(year(as_date(date))))
+
+DataStuart$species<-factor(DataStuart$species)
+
+##### add standardized CPUE
+DataStuart$CPUEst<-DataStuart$CPUEun*DataStuart$RSA*DataStuart$RS
+
+######## change NAs in CPUEs with 0s
+
+DataStuart$CPUEst[is.na(DataStuart$CPUEst)] <- 0
+
+### fix SD and Rect
+
+DataStuart$SD <- survey_idx[match(DataStuart$IDX, survey_idx$IDX),"SD"] 
+DataStuart$Rect <- survey_idx[match(DataStuart$IDX, survey_idx$IDX),"Rect"] 
+
+#### there are 3 hauls that are in "IIIa" so I will remove them
+
+#nrow(DataStuart)
+#DataStuart <- DataStuart[DataStuart$SD!="IIIa",]
+
+summary(DataStuart)
+str(DataStuart)
+
+t <- DataStuart |> filter(CPUEst == 0)
+
+
+DataStuart |> 
+  drop_na(year) |> 
+  filter(!CPUEst == 0) |> 
+  summarise(n = n(), .by = c(year, species)) |> 
+  ggplot(aes(year, n, fill = species)) +
+  geom_bar(stat = "identity")
+
+DataStuart |> 
+  drop_na(year) |> 
+  distinct(IDX, .keep_all = TRUE) |> 
+  ggplot(aes(LONGDD, LATDD)) +
+  geom_point()
+```
+
+Now we read in the DATRAS data
+
+```{r DATRAS}
+######### standardization DATRAS
+
+### Read the zip file
+
+datras<- readExchange(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Datras/Exchange Data_2017-03-28 11_54_40.zip"))
+
+####### HH
+
+HH <- datras[["HH"]]
+
+names(HH)
+
+levels(HH$haul.id)
+
+### put year as numeric
+
+HH$Year <- as.numeric(as.character(HH$Year))
+
+###### select just valid, additional and no oxygen hauls from every country except Sweden
+
+HHdata <- HH |>
+  filter(Country!="SWE" & HaulVal %in% c("A","N","V"))
+
+
+####### fix SD and ICES rect
+pts <- SpatialPoints(cbind(HHdata$lon, HHdata$lat), 
+                     proj4string = CRS(proj4string(xx)))
+
+HHdata$SD <- over(pts, xx)$Area_27
+
+HHdata <- HHdata |> 
+  mutate(SD = factor(SD),
+         SD = fct_recode(SD,
+                         "20" = "3.a.20",
+                         "21" = "3.a.21",
+                         "22" = "3.c.22",
+                         "23" = "3.b.23",
+                         "24" = "3.d.24",
+                         "25" = "3.d.25",
+                         "26" = "3.d.26",
+                         "27" = "3.d.27",
+                         "28" = "3.d.28.1",
+                         "28" = "3.d.28.2",
+                         "29" = "3.d.29"))
+
+
+HHdata$Rect <- mapplots::ices.rect2(HHdata$lon, HHdata$lat)
+
+summary(HHdata$Rect)
+summary(factor(HHdata$StatRec))
+
+##### there are 7 hauls with no depth registered. I will just put an aprox depth for one haul in SD 24, for one in 26 and 4 in SD 22.
+
+HHdata[is.na(HHdata$Depth),]
+HHdata$Depth[is.na(HHdata$Depth) & HHdata$SD == "26"] <- 115
+HHdata$Depth[is.na(HHdata$Depth) & HHdata$SD == "24"] <- 31
+HHdata$Depth[is.na(HHdata$Depth) & HHdata$SD == "22" & HHdata$haul.id == "2000:4:DEN:HAF:TVS:018138:1"] <- 23
+HHdata$Depth[is.na(HHdata$Depth) & HHdata$SD == "22" & HHdata$haul.id == "2002:4:DEN:HAF:TVS:8882:25"] <- 37
+HHdata$Depth[is.na(HHdata$Depth) & HHdata$SD == "22" & HHdata$haul.id == "2008:4:DEN:HAF:TVS:1878:27"] <- 15
+HHdata$Depth[is.na(HHdata$Depth) & HHdata$SD == "22" & HHdata$haul.id == "2009:4:DEN:HAF:TVS:2365:28"] <- 20
+
+
+
+
+####### HL
+
+HL <- datras[["HL"]]
+
+HL |> 
+  summarise(n = n(), .by = Species) |> 
+  arrange(desc(n))
+
+
+names(HL)
+
+### put year as numeric
+
+HL$Year <- as.numeric(as.character(HL$Year))
+
+###### select just the hauls in HHdata
+
+HLdata <- HL[HL$haul.id %in% HHdata$haul.id,]
+
+# write.csv(HLdata,"New/Datras/HLdata.csv")
+
+#### match haul SD, rect, haul validity, StdSpecRecCode and BycSpecRecCode
+
+HLdata$SD <- HHdata[match(HLdata$haul.id, HHdata$haul.id),"SD"] 
+HLdata$Rect <- HHdata[match(HLdata$haul.id, HHdata$haul.id),"Rect"] 
+HLdata$HaulVal <- HHdata[match(HLdata$haul.id, HHdata$haul.id),"HaulVal"] 
+HLdata$StdSpecRecCode <- HHdata[match(HLdata$haul.id, HHdata$haul.id),"StdSpecRecCode"] 
+HLdata$BycSpecRecCode <- HHdata[match(HLdata$haul.id, HHdata$haul.id),"BycSpecRecCode"] 
+
+
+summary(HLdata$HaulVal)
+summary(HHdata$HaulVal)
+
+####### select different species
+
+hlcod <- HLdata |>
+  filter(Species=="Gadus morhua")
+
+hlflo <- HLdata  |>
+  filter(Species=="Platichthys flesus")
+
+hlpla <- HLdata  |>
+  filter(Species=="Pleuronectes platessa")
+
+hldab <- HLdata  |>
+  filter(Species=="Limanda limanda")
+
+hltur <- HLdata  |>
+  filter(Species=="Psetta maxima")
+
+hlwhi <- HLdata  |>
+  filter(Species=="Merlangius merlangus")
+
+##### add 0 catches
+#### common columns for merging
+comcol <- intersect(names(hlcod), names(HHdata))
+comcol <- comcol[-c(2,14,16)]
+
+##### for cod add 0s and then remove lines with SpecVal = 0
+hlcod0 <- merge(hlcod,HHdata[,comcol],by = comcol, all = TRUE)
+summary(hlcod0)
+
+hlcod0$SpecVal[is.na(hlcod0$SpecVal)] <- "zeroCatch"
+hlcod0$SpecVal <- factor(hlcod0$SpecVal)
+
+hlcod0 <-  hlcod0 |>
+  filter(SpecVal!="0")
+
+hlcod0$Species<-"Gadus morhua"
+
+##### for flounder add 0s, remove them if StdSpecRecCode !=1 and then remove lines with SpecVal = 0
+hlflo0 <- merge(hlflo,HHdata[,comcol],by = comcol, all = TRUE)
+summary(hlflo0)
+
+hlflo0 <- hlflo0[!(is.na(hlflo0$Species) & hlflo0$StdSpecRecCode != 1),] 
+
+hlflo0$SpecVal[is.na(hlflo0$SpecVal)] <- "zeroCatch"
+hlflo0$SpecVal <- factor(hlflo0$SpecVal)
+
+hlflo0 <-  hlflo0 |>
+  filter(SpecVal!="0")
+
+hlflo0$Species<-"Platichthys flesus"
+
+##### for plaice add 0s, remove them if StdSpecRecCode !=1 and then remove lines with SpecVal = 0
+hlpla0 <- merge(hlpla,HHdata[,comcol],by = comcol, all = TRUE)
+summary(hlpla0)
+
+hlpla0 <- hlpla0[!(is.na(hlpla0$Species) & hlpla0$StdSpecRecCode != 1),] 
+
+hlpla0$SpecVal[is.na(hlpla0$SpecVal)] <- "zeroCatch"
+hlpla0$SpecVal <- factor(hlpla0$SpecVal)
+
+hlpla0 <-  hlpla0 |>
+  filter(SpecVal!="0")
+
+hlpla0$Species<-"Pleuronectes platessa"
+
+##### for dab add 0s, remove them if BycSpecRecCode !=1 and then remove lines with SpecVal = 0
+hldab0 <- merge(hldab,HHdata[,comcol],by = comcol, all = TRUE)
+summary(hldab0)
+
+hldab0 <- hldab0[!(is.na(hldab0$Species) & hldab0$BycSpecRecCode != 1),] 
+
+hldab0$SpecVal[is.na(hldab0$SpecVal)] <- "zeroCatch"
+hldab0$SpecVal <- factor(hldab0$SpecVal)
+
+hldab0 <-  hldab0 |>
+  filter(SpecVal!="0")
+
+hldab0$Species<-"Limanda limanda"
+
+##### for turbot add 0s, remove them if BycSpecRecCode !=1 and then remove lines with SpecVal = 0
+hltur0 <- merge(hltur,HHdata[,comcol],by = comcol, all = TRUE)
+summary(hltur0)
+
+hltur0 <- hltur0[!(is.na(hltur0$Species) & hltur0$BycSpecRecCode != 1),] 
+
+hltur0$SpecVal[is.na(hltur0$SpecVal)] <- "zeroCatch"
+hltur0$SpecVal <- factor(hltur0$SpecVal)
+
+hltur0 <-  hltur0 |>
+  filter(SpecVal!="0")
+
+hltur0$Species<-"Psetta maxima"
+
+##### for whiting add 0s, remove them if BycSpecRecCode !=1 and then remove lines with SpecVal = 0
+hlwhi0 <- merge(hlwhi,HHdata[,comcol],by = comcol, all = TRUE)
+summary(hlwhi0)
+
+hlwhi0 <- hlwhi0[!(is.na(hlwhi0$Species) & hlwhi0$BycSpecRecCode != 1),] 
+
+hlwhi0$SpecVal[is.na(hlwhi0$SpecVal)] <- "zeroCatch"
+hlwhi0$SpecVal <- factor(hlwhi0$SpecVal)
+
+hlwhi0 <-  hlwhi0 |>
+  filter(SpecVal!="0")
+
+hlwhi0$Species<-"Merlangius merlangus"
+
+
+#### check number of hauls for each species
+n_distinct(HHdata$haul.id)
+n_distinct(hlcod0$haul.id)
+n_distinct(hlflo0$haul.id)
+n_distinct(hlpla0$haul.id)
+n_distinct(hldab0$haul.id)
+n_distinct(hltur0$haul.id)
+n_distinct(hlwhi0$haul.id)
+
+
+####### create CPUE unstandardized for SpecVal=1. If DataType = C then CPUEun=HLNoAtLngt, if DataType=R then CPUEun=HLNoAtLngt/(HaulDur/60), if DataType = S then CPUEun=(HLNoAtLngt*SubFactor)/(HaulDur/60). If SpecVal="zeroCatch" then CPUEun=0, if SpecVal=4 we need to decide.
+# Then I will sum for the same haul the CPUE of the same length classes if they were sampled with different subfactors or with different sexes.
+
+#### cod
+hlcod0 <- hlcod0 |>
+  mutate(CPUEun= ifelse(SpecVal=="1" & DataType == "C",HLNoAtLngt,ifelse(SpecVal=="1" & DataType == "R",HLNoAtLngt/(HaulDur/60),ifelse(SpecVal=="1" & DataType == "S",(HLNoAtLngt*SubFactor)/(HaulDur/60),ifelse(SpecVal=="zeroCatch",0,NA)))))
+
+##### create the data.frame with records without LFD
+
+hlcod4 <- hlcod0 |>
+  filter(SpecVal=="4")
+
+#### sum the CPUE for the fishes of the same length class in a haul
+colsumsex <- names(hlcod0)[c(1:22,30,31,35:37,39)]
+
+
+hlcodL <- hlcod0[,colsumsex] |>
+  filter(!SpecVal=="4") 
+
+temp <-summaryBy(CPUEun ~ LngtClas+haul.id, data = hlcodL,  FUN = sum, keep.names = TRUE )
+
+hlcodL <- merge(hlcodL[,-28],temp, by=c("LngtClas","haul.id"),all.y = TRUE)
+
+hlcodL<-unique(hlcodL)
+
+#### flounder
+hlflo0 <- hlflo0 |>
+  mutate(CPUEun= ifelse(SpecVal=="1" & DataType == "C",HLNoAtLngt,ifelse(SpecVal=="1" & DataType == "R",HLNoAtLngt/(HaulDur/60),ifelse(SpecVal=="1" & DataType == "S",(HLNoAtLngt*SubFactor)/(HaulDur/60),ifelse(SpecVal=="zeroCatch",0,NA)))))
+
+##### create the data.frame with records without LFD
+
+hlflo4 <- hlflo0 |>
+  filter(SpecVal=="4")
+
+#### sum the CPUE for the fishes of the same length class in a haul
+
+hlfloL <- hlflo0[,colsumsex] |>
+  filter(!SpecVal=="4") 
+
+temp <-summaryBy(CPUEun ~ LngtClas+haul.id, data = hlfloL,  FUN = sum, keep.names = TRUE )
+
+hlfloL <- merge(hlfloL[,-28],temp, by=c("LngtClas","haul.id"),all.y = TRUE)
+
+hlfloL<-unique(hlfloL)
+
+#### plaice
+hlpla0 <- hlpla0 |>
+  mutate(CPUEun= ifelse(SpecVal=="1" & DataType == "C",HLNoAtLngt,ifelse(SpecVal=="1" & DataType == "R",HLNoAtLngt/(HaulDur/60),ifelse(SpecVal=="1" & DataType == "S",(HLNoAtLngt*SubFactor)/(HaulDur/60),ifelse(SpecVal=="zeroCatch",0,NA)))))
+
+##### create the data.frame with records without LFD
+
+hlpla4 <- hlpla0 |>
+  filter(SpecVal=="4")
+
+#### sum the CPUE for the fishes of the same length class in a haul
+
+hlplaL <- hlpla0[,colsumsex] |>
+  filter(!SpecVal=="4") 
+
+temp <-summaryBy(CPUEun ~ LngtClas+haul.id, data = hlplaL,  FUN = sum, keep.names = TRUE )
+
+hlplaL <- merge(hlplaL[,-28],temp, by=c("LngtClas","haul.id"),all.y = TRUE)
+
+hlplaL<-unique(hlplaL)
+
+
+#### dab
+hldab0 <- hldab0 |>
+  mutate(CPUEun= ifelse(SpecVal=="1" & DataType == "C",HLNoAtLngt,ifelse(SpecVal=="1" & DataType == "R",HLNoAtLngt/(HaulDur/60),ifelse(SpecVal=="1" & DataType == "S",(HLNoAtLngt*SubFactor)/(HaulDur/60),ifelse(SpecVal=="zeroCatch",0,NA)))))
+
+##### create the data.frame with records without LFD
+
+hldab4 <- hldab0 |>
+  filter(SpecVal=="4")
+
+#### sum the CPUE for the fishes of the same length class in a haul
+
+hldabL <- hldab0[,colsumsex] |>
+  filter(!SpecVal=="4") 
+
+temp <-summaryBy(CPUEun ~ LngtClas+haul.id, data = hlplaL,  FUN = sum, keep.names = TRUE )
+
+hldabL <- merge(hldabL[,-28],temp, by=c("LngtClas","haul.id"),all.y = TRUE)
+
+hldabL<-unique(hldabL)
+
+
+#### turbot
+hltur0 <- hltur0 |>
+  mutate(CPUEun= ifelse(SpecVal=="1" & DataType == "C",HLNoAtLngt,ifelse(SpecVal=="1" & DataType == "R",HLNoAtLngt/(HaulDur/60),ifelse(SpecVal=="1" & DataType == "S",(HLNoAtLngt*SubFactor)/(HaulDur/60),ifelse(SpecVal=="zeroCatch",0,NA)))))
+
+##### create the data.frame with records without LFD
+
+hltur4 <- hltur0 |>
+  filter(SpecVal=="4")
+
+#### sum the CPUE for the fishes of the same length class in a haul
+
+hlturL <- hltur0[,colsumsex] |>
+  filter(!SpecVal=="4") 
+
+temp <-summaryBy(CPUEun ~ LngtClas+haul.id, data = hlplaL,  FUN = sum, keep.names = TRUE )
+
+hlturL <- merge(hlturL[,-28],temp, by=c("LngtClas","haul.id"),all.y = TRUE)
+
+hlturL<-unique(hlturL)
+
+
+
+#### whiting
+hlwhi0 <- hlwhi0 |>
+  mutate(CPUEun= ifelse(SpecVal=="1" & DataType == "C",HLNoAtLngt,ifelse(SpecVal=="1" & DataType == "R",HLNoAtLngt/(HaulDur/60),ifelse(SpecVal=="1" & DataType == "S",(HLNoAtLngt*SubFactor)/(HaulDur/60),ifelse(SpecVal=="zeroCatch",0,NA)))))
+
+##### create the data.frame with records without LFD
+
+hlwhi4 <- hlwhi0 |>
+  filter(SpecVal=="4")
+
+#### sum the CPUE for the fishes of the same length class in a haul
+
+hlwhiL <- hlwhi0[,colsumsex] |>
+  filter(!SpecVal=="4") 
+
+temp <-summaryBy(CPUEun ~ LngtClas+haul.id, data = hlplaL,  FUN = sum, keep.names = TRUE )
+
+hlwhiL <- merge(hlwhiL[,-28],temp, by=c("LngtClas","haul.id"),all.y = TRUE)
+
+hlwhiL<-unique(hlwhiL)
+
+
+
+######### CA
+
+CA <- datras[["CA"]]
+
+names(CA)
+
+### put year as numeric
+
+CA$Year <- as.numeric(as.character(CA$Year))
+
+###### select just the hauls in HHdata
+
+CAdata <- CA[CA$haul.id %in% HHdata$haul.id,]
+
+
+
+#### match haul SD, rect, haul validity
+
+CAdata$SD <- HHdata[match(CAdata$haul.id, HHdata$haul.id),"SD"] 
+CAdata$Rect <- HHdata[match(CAdata$haul.id, HHdata$haul.id),"Rect"] 
+CAdata$HaulVal <- HHdata[match(CAdata$haul.id, HHdata$haul.id),"HaulVal"] 
+
+####### select different species remove missing individual weights or weight = 0
+cacod <- CAdata |>
+  filter(Species=="Gadus morhua" & IndWgt != 0 & !(is.na(IndWgt)))
+
+caflo <- CAdata  |>
+  filter(Species=="Platichthys flesus" & IndWgt != 0 & !(is.na(IndWgt)))
+
+capla <- CAdata  |>
+  filter(Species=="Pleuronectes platessa" & IndWgt != 0 & !(is.na(IndWgt)))
+
+cadab <- CAdata  |>
+  filter(Species=="Limanda limanda" & IndWgt != 0 & !(is.na(IndWgt)))
+
+catur <- CAdata  |>
+  filter(Species=="Psetta maxima" & IndWgt != 0 & !(is.na(IndWgt)))
+
+cawhi <- CAdata  |>
+  filter(Species=="Merlangius merlangus" & IndWgt != 0 & !(is.na(IndWgt)))
+
+####### change the flounder of 347 cm in 34.7
+caflo$LngtCm[caflo$LngtCm == 347] <- 34.7
+
+###### check for outliers
+
+# ggplot(data=cacod, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=1) +facet_wrap(~Year)+ggtitle("cod")
+# ggplot(data=caflo, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=1) +facet_wrap(~Year)+ggtitle("flounder")
+# ggplot(data=capla, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=1) +facet_wrap(~Year)+ggtitle("plaice")
+# ggplot(data=cadab, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=1) +facet_wrap(~Year)+ggtitle("dab")
+# 
+# ggplot(data=cacod, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=1) +facet_grid(SD~Year)+ggtitle("cod")
+# ggplot(data=caflo, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=1) +facet_grid(SD~Year)+ggtitle("flounder")
+# ggplot(data=capla, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=1) +facet_grid(SD~Year)+ggtitle("plaice")
+# ggplot(data=cadab, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=1) +facet_grid(SD~Year)+ggtitle("dab")
+
+###### clean outliers
+
+cacod <- cacod |>
+  filter(!(haul.id=="1996:1:DEN:HAF:TVS:5666:44" & LngtCm== 88)) |>
+  filter(!(haul.id=="1999:1:DEN:DAN2:GRT:108:50" & LngtCm== 32)) |>
+  filter(!(haul.id=="2010:4:POL:BAL:TVL:25003:12" & LngtCm== 52 & IndWgt >=10000)) |>
+  filter(!(haul.id=="1994:1:POL:BAL:P20:Jan:33" & LngtCm== 91)) |>
+  filter(!(haul.id=="2009:1:RUS:ATL:TVL:57:4" & LngtCm== 75)) |>
+  filter(!(haul.id=="2013:1:GFR:SOL2:TVS:24104:49" & LngtCm== 81))
+
+caflo <- caflo |>
+  filter(!(haul.id=="2008:4:DEN:DAN2:TVL:65:31")) |>
+  filter(!(haul.id=="2004:4:RUS:ATL:TVL:NA:71")) |>
+  filter(!(haul.id=="2007:4:EST:CEV:TVS:2:10" & LngtCm== 17 & IndWgt >=200)) |>
+  filter(!(haul.id=="2006:4:EST:CEV:TVS:1:2" & LngtCm== 19 & IndWgt >=800)) |>
+  filter(!(haul.id=="2002:1:GFR:SOL:TVS:288:125" & LngtCm== 24 & IndWgt ==530)) |>
+  filter(!(haul.id=="1995:1:GFR:SOL:H20:37:27" & LngtCm== 26 & IndWgt ==550)) |>
+  filter(!(haul.id=="1996:4:GFR:SOL:H20:27:59" & LngtCm== 36 & IndWgt ==270)) |>
+  filter(!(haul.id=="1996:4:GFR:SOL:H20:49:48" & LngtCm== 38 & IndWgt ==450)) |>
+  filter(!(haul.id=="1996:1:GFR:SOL:H20:51:43" & LngtCm== 38 & IndWgt ==520)) |>
+  filter(!(haul.id=="1996:4:GFR:SOL:H20:48:47" & LngtCm== 38 & IndWgt ==565)) |>
+  filter(!(haul.id=="1996:1:GFR:SOL:H20:46:49" & LngtCm== 38 & IndWgt ==590)) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:29:15" & LngtCm== 26 & IndWgt ==85)) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:26:13" & LngtCm== 30 & IndWgt ==156)) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:26:13" & LngtCm== 30 & IndWgt ==166)) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:3:2" & LngtCm== "26.5" & IndWgt =="826")) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:6:3" & LngtCm== "26.5" & IndWgt =="448")) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:6:3" & LngtCm== 34 & IndWgt ==184)) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:32:16" & LngtCm== "31.5" & IndWgt =="216")) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:29:15" & LngtCm== "31.5" & IndWgt =="930")) |>
+  filter(!(haul.id=="2005:4:GFR:SOL2:TVS:24076:50" & LngtCm== 40 & IndWgt ==462)) |>
+  filter(!(haul.id=="2012:4:GFR:SOL2:TVS:24325:17" & LngtCm== 25 & IndWgt ==523)) |>
+  filter(!(haul.id=="1995:1:GFR:SOL:H20:71:67" & LngtCm== 28 & IndWgt ==560)) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:83:40" & LngtCm== "34.5" & IndWgt =="986")) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:54:26" & LngtCm== 34 & IndWgt ==980)) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:67:32" & LngtCm== "35.5" & IndWgt =="930")) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:77:37" & LngtCm== 37 & IndWgt ==902)) |>
+  filter(!(haul.id=="2001:1:DEN:DAN2:TVL:61:29" & LngtCm== "36.5" & IndWgt =="884")) |>
+  filter(!(haul.id=="2003:4:POL:BAL:TVL:NA:26" & LngtCm== 40 & IndWgt ==429)) |>
+  filter(!(haul.id=="2005:4:POL:BAL:TVL:NA:22" & LngtCm== 27 & IndWgt ==830)) |>
+  filter(!(haul.id=="2005:4:POL:BAL:TVL:NA:11" & LngtCm== 25 & IndWgt ==587)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:257:34" & LngtCm== 24 & IndWgt ==588)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:166:13" & LngtCm== 34 & IndWgt ==150)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:206:18" & LngtCm== 35 & IndWgt ==162)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:162:11" & LngtCm== 35 & IndWgt ==202)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:162:11" & LngtCm== 39 & IndWgt ==314)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:167:14" & LngtCm== 37 & IndWgt ==346)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:162:11" & LngtCm== 37 & IndWgt ==418)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:166:13" & LngtCm== 37 & IndWgt ==498)) |>
+  filter(!(haul.id=="2007:4:DEN:DAN2:TVL:208:19" & LngtCm== 38 & IndWgt ==522)) |>
+  filter(!(haul.id=="2009:4:DEN:DAN2:TVL:76:47" & LngtCm== 16 & IndWgt ==186)) |>
+  filter(!(haul.id=="2010:4:DEN:DAN2:TVL:55:44" & LngtCm== 20 & IndWgt ==290)) |>
+  filter(!(haul.id=="2010:4:DEN:DAN2:TVL:110:4" & LngtCm== 20 & IndWgt ==280)) |>
+  filter(!(haul.id=="2010:4:DEN:DAN2:TVL:110:4" & LngtCm== 20 & IndWgt ==238)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:180:18" & LngtCm== 20 & IndWgt ==258)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:182:19" & LngtCm== 23 & IndWgt ==470)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:200:29" & LngtCm== 22 & IndWgt ==436)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:210:34" & LngtCm== 21 & IndWgt ==358)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:206:32" & LngtCm== 23 & IndWgt ==348)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:218:38" & LngtCm== 22 & IndWgt ==304)) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:132:8" & LngtCm== "23.7" & IndWgt =="412")) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:113:4" & LngtCm== "20.3" & IndWgt =="374")) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:68:44" & LngtCm== "24.8" & IndWgt =="244")) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:86:46" & LngtCm== "22.6" & IndWgt =="236")) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:139:10" & LngtCm== "32.8" & IndWgt =="116")) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:145:14" & LngtCm== "33.2" & IndWgt =="150")) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:134:9" & LngtCm== "35.9" & IndWgt =="270")) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:113:4" & LngtCm== "40.8" & IndWgt =="284")) |>
+  filter(!(haul.id=="2002:1:RUS:VSH:TVL:NA:1" & LngtCm== 41 & IndWgt ==530)) |>
+  filter(!(haul.id=="2002:1:RUS:VSH:TVL:NA:38" & LngtCm== 42 & IndWgt ==640)) |>
+  filter(!(haul.id=="2002:1:POL:BAL:TVL:7:7" & LngtCm== 44 & IndWgt ==650)) |>
+  filter(!(haul.id=="2002:1:POL:BAL:TVL:7:7" & LngtCm== 44 & IndWgt ==680)) |>
+  filter(!(haul.id=="2002:1:RUS:VSH:TVL:NA:41" & LngtCm== 41 & IndWgt ==720)) |>
+  filter(!(haul.id=="2003:1:RUS:ATL:TVL:NA:50" & LngtCm== 20 & IndWgt ==300)) |>
+  filter(!(haul.id=="2003:4:RUS:ATLD:TVL:NA:58" & LngtCm== 33 & IndWgt ==140)) |>
+  filter(!(haul.id=="2004:4:LTU:DAR:TVS:NA:1" & LngtCm== 11 & IndWgt ==183)) |>
+  filter(!(haul.id=="2004:4:POL:BAL:TVL:NA:7" & LngtCm== 29 & IndWgt ==860)) |>
+  filter(!(haul.id=="2004:1:RUS:ATL:TVL:NA:6" & LngtCm== 30 & IndWgt ==600)) |>
+  filter(!(haul.id=="2004:1:RUS:ATL:TVL:NA:22" & LngtCm== 25 & IndWgt ==480)) |>
+  filter(!(haul.id=="2005:1:LTU:DAR:TVS:NA:3" & LngtCm== 23 & IndWgt ==534)) |>
+  filter(!(haul.id=="2005:1:RUS:ATL:TVL:NA:1" & LngtCm== 23 & IndWgt ==430)) |>
+  filter(!(haul.id=="2005:1:RUS:ATL:TVL:NA:1" & LngtCm== 24 & IndWgt ==420)) |>
+  filter(!(haul.id=="2005:1:RUS:ATL:TVL:NA:52" & LngtCm== 26 & IndWgt ==430)) |>
+  filter(!(haul.id=="2005:4:RUS:ATLD:TVL:36:42" & LngtCm== 35 & IndWgt ==284)) |>
+  filter(!(haul.id=="2005:4:RUS:ATLD:TVL:36:35" & LngtCm== 38 & IndWgt ==299)) |>
+  filter(!(haul.id=="2005:4:RUS:ATLD:TVL:36:34" & LngtCm== 38 & IndWgt ==380)) |>
+  filter(!(haul.id=="2006:1:RUS:ATLD:TVL:NA:18" & LngtCm== 39 & IndWgt ==390)) |>
+  filter(!(haul.id=="2007:1:LTU:DAR:TVS:Mar:3" & LngtCm== 24 & IndWgt ==499)) |>
+  filter(!(haul.id=="2007:4:LTU:DAR:TVS:Nov:5" & LngtCm== 20 & IndWgt ==307)) |>
+  filter(!(haul.id=="2007:4:LTU:DAR:TVS:Nov:8" & LngtCm== 23 & IndWgt ==305)) |>
+  filter(!(haul.id=="2007:1:RUS:ATL:TVL:52:3" & LngtCm== 26 & IndWgt ==440)) |>
+  filter(!(haul.id=="2007:1:LTU:DAR:TVS:Mar:4" & LngtCm== 36 & IndWgt ==221)) |>
+  filter(!(haul.id=="2008:1:RUS:ATLD:TVL:49:3" & LngtCm== 30 & IndWgt ==90)) |>
+  filter(!(haul.id=="2008:4:DEN:DAN2:TVL:46:26" & LngtCm== 27 & IndWgt ==454)) |>
+  filter(!(haul.id=="2008:1:LTU:DAR:TVS:March:1" & LngtCm== 36 & IndWgt ==237)) |>
+  filter(!(haul.id=="2009:1:RUS:ATL:TVL:57:25" & LngtCm== 29 & IndWgt ==560)) |>
+  filter(!(haul.id=="2009:1:RUS:ATL:TVL:57:6" & LngtCm== 24 & IndWgt ==510)) |>
+  filter(!(haul.id=="2009:1:RUS:ATL:TVL:57:6" & LngtCm== 26 & IndWgt ==490)) |>
+  filter(!(haul.id=="2009:1:RUS:ATL:TVL:57:6" & LngtCm== 33 & IndWgt ==200)) |>
+  filter(!(haul.id=="2009:1:RUS:ATL:TVL:57:10" & LngtCm== 36 & IndWgt ==300)) |>
+  filter(!(haul.id=="2009:4:LTU:DAR:TVS:26027:1" & LngtCm== 39 & IndWgt ==322)) |>
+  filter(!(haul.id=="2010:1:RUS:ATL:TVL:60:21" & LngtCm== 32 & IndWgt ==111)) |>
+  filter(!(haul.id=="2010:1:RUS:ATL:TVL:60:29" & LngtCm== 34 & IndWgt ==153)) |>
+  filter(!(haul.id=="2010:1:RUS:ATL:TVL:60:23" & LngtCm== 33 & IndWgt ==156)) |>
+  filter(!(haul.id=="2010:1:RUS:ATL:TVL:60:18" & LngtCm== 36 & IndWgt ==221)) |>
+  filter(!(haul.id=="2011:1:RUS:ATLD:TVL:56:40" & LngtCm== 30 & IndWgt ==632)) |>
+  filter(!(haul.id=="2012:4:POL:BAL:TVL:26177:17" & LngtCm== 26 & IndWgt ==23)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:190:23" & LngtCm== 22 & IndWgt ==290)) |>
+  filter(!(haul.id=="2013:1:RUS:ATLD:TVL:60:33" & LngtCm== 23 & IndWgt ==382)) |>
+  filter(!(haul.id=="2013:1:LAT:BALL:TVL:1:1" & LngtCm== 34 & IndWgt ==114)) |>
+  filter(!(haul.id=="2013:1:RUS:ATLD:TVL:60:33" & LngtCm== 32 & IndWgt ==144)) |>
+  filter(!(haul.id=="2013:1:LTU:DAR:TVS:26030:3" & LngtCm== 41 & IndWgt ==384)) |>
+  filter(!(haul.id=="1996:1:LAT:MONL:DT:000001:74" & LngtCm== 36 & IndWgt ==1350)) |>
+  filter(!(haul.id=="1997:4:LAT:CLV:LBT:000002:15" & LngtCm== 35 & IndWgt ==208)) |>
+  filter(!(haul.id=="1997:2:LAT:CLV:LBT:000001:2" & LngtCm== 33 & IndWgt ==240)) |>
+  filter(!(haul.id=="1999:1:LAT:CLV:LBT:000001:21" & LngtCm== 20 & IndWgt ==220)) |>
+  filter(!(haul.id=="1999:1:LAT:CLV:LBT:000001:4" & LngtCm== 24 & IndWgt ==626)) |>
+  filter(!(haul.id=="1999:2:LAT:CLV:LBT:000001:35" & LngtCm== 23 & IndWgt ==395)) |>
+  filter(!(haul.id=="1999:2:LAT:CLV:LBT:000001:27" & LngtCm== 21 & IndWgt ==280)) |>
+  filter(!(haul.id=="2000:1:LAT:CLV:LBT:000001:16" & LngtCm== 20 & IndWgt ==210)) |>
+  filter(!(haul.id=="2000:4:LAT:CLV:LBT:000002:15" & LngtCm== 28 & IndWgt ==603)) |>
+  filter(!(haul.id=="2001:1:LAT:CLV:TVS:1:3" & LngtCm== 40 & IndWgt ==618)) |>
+  filter(!(haul.id=="2005:4:EST:CEV:TVS:1:10" & LngtCm== 26 & IndWgt ==435)) |>
+  filter(!(haul.id=="2014:1:LAT:BALL:TVL:1:10" & LngtCm== 14 & IndWgt ==108)) |>
+  filter(!(haul.id=="2000:4:EST:KOOT:TVS:000018:18" & LngtCm== 21 & IndWgt ==18)) |>
+  filter(!(haul.id=="2000:4:EST:KOOT:TVS:000018:18" & LngtCm== 20 & IndWgt ==32)) |>
+  filter(!(haul.id=="2000:4:EST:KOOT:TVS:000018:18" & LngtCm== 36 & IndWgt ==973)) |>
+  filter(!(haul.id=="2005:4:EST:CEV:TVS:1:2" & LngtCm== 26 & IndWgt ==94)) |>
+  filter(!(haul.id=="2005:4:EST:CEV:TVS:1:6" & LngtCm== 29 & IndWgt ==110)) |>
+  filter(!(haul.id=="2006:4:EST:CEV:TVS:1:1" & LngtCm== 20 & IndWgt ==300)) |>
+  filter(!(haul.id=="2006:4:EST:CEV:TVS:1:3" & LngtCm== 18 & IndWgt ==167)) |>
+  filter(!(haul.id=="2006:4:EST:CEV:TVS:1:3" & LngtCm== 19 & IndWgt ==161)) |>
+  filter(!(haul.id=="2007:4:EST:CEV:TVS:1:6" & LngtCm== 21 & IndWgt ==226)) |>
+  filter(!(haul.id=="2007:4:EST:CEV:TVS:1:6" & LngtCm== 19 & IndWgt ==185)) |>
+  filter(!(haul.id=="2007:4:EST:CEV:TVS:1:5" & LngtCm== 20 & IndWgt ==175)) |>
+  filter(!(haul.id=="2007:4:EST:CEV:TVS:1:5" & LngtCm== 19 & IndWgt ==165)) |>
+  filter(!(haul.id=="2007:4:EST:CEV:TVS:1:3" & LngtCm== 22 & IndWgt ==37)) |>
+  filter(!(haul.id=="2009:4:EST:CEV:TVS:2:4" & LngtCm== 11 & IndWgt ==117)) |>
+  filter(!(haul.id=="2009:4:EST:CEV:TVS:2:4" & LngtCm== 11 & IndWgt ==135)) |>
+  filter(!(haul.id=="2009:4:EST:CEV:TVS:2:1" & LngtCm== 20 & IndWgt ==31)) |>
+  filter(!(haul.id=="2009:4:EST:CEV:TVS:2:1" & LngtCm== 20 & IndWgt ==37)) |>
+  filter(!(haul.id=="2009:4:EST:CEV:TVS:2:1" & LngtCm== 19 & IndWgt ==32)) |>
+  filter(!(haul.id=="2009:4:EST:CEV:TVS:2:1" & LngtCm== 19 & IndWgt ==36)) |>
+  filter(!(haul.id=="2009:4:EST:CEV:TVS:2:1" & LngtCm== 29 & IndWgt ==137)) |>
+  filter(!(haul.id=="2010:4:EST:CEV:TVS:1:8" & LngtCm== 29 & IndWgt ==133)) |>
+  filter(!(haul.id=="2014:4:EST:CEV:TVS:1:4" & LngtCm== 11 & IndWgt ==52)) |>
+  filter(!(haul.id=="2014:4:EST:CEV:TVS:1:4" & LngtCm== 20 & IndWgt ==193)) |>
+  filter(!(haul.id=="2014:4:EST:CEV:TVS:1:4" & LngtCm== "18" & IndWgt =="179.5")) |>
+  filter(!(haul.id=="2014:4:EST:CEV:TVS:1:4" & LngtCm== 23 & IndWgt ==56.5)) |>
+  filter(!(haul.id=="1994:2:LAT:MONL:DT:000001:14" & LngtCm== 25 & IndWgt ==420)) |>
+  filter(!(haul.id=="2009:1:RUS:ATL:TVL:57:6" & LngtCm== 24 & IndWgt ==460)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:222:41" & LngtCm== 25 & IndWgt ==476)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:222:41" & LngtCm== 25 & IndWgt ==470)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:222:41" & LngtCm== 25 & IndWgt ==424)) |>
+  filter(!(haul.id=="2013:1:DEN:DAN2:TVL:113:4" & LngtCm== "25.2" & IndWgt =="546")) |>
+  filter(!(haul.id=="2009:1:RUS:ATL:TVL:57:34" & LngtCm== 24 & IndWgt ==460)) |>
+  filter(!(haul.id=="2016:1:DEN:DAN2:TVL:53:10" & LngtCm== 20 & IndWgt ==490)) |>
+  filter(!(haul.id=="2015:1:GFR:SOL2:TVS:24067:19" & LngtCm== 32 & IndWgt ==137)) |>
+  filter(!(haul.id=="2017:1:GFR:SOL2:TVS:24321:26" & LngtCm== 23 & IndWgt ==413)) |>
+  filter(!(haul.id=="2008:4:DEN:DAN2:TVL:63:30"))
+
+caflo |>
+  filter(LngtCm<= 25 & IndWgt >=400 & LngtCm>= 20 ) 
+
+capla <- capla |>
+  filter(!(haul.id=="2009:1:DEN:DAN2:TVL:92:48" & LngtCm== 33)) |>
+  filter(!(haul.id=="2014:4:GFR:SOL2:TVS:24039:28" & LngtCm== 25)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:172:14" & LngtCm== 1)) |>
+  filter(!(haul.id=="2012:1:DEN:DAN2:TVL:172:14" & LngtCm== 2)) |>
+  filter(!(haul.id=="2009:1:DEN:DAN2:TVL:146:10" & LngtCm== 49)) |>
+  filter(!(haul.id=="2009:1:DEN:DAN2:TVL:140:7" & LngtCm== 40)) |>
+  filter(!(haul.id=="2009:1:DEN:DAN2:TVL:140:7" & LngtCm== 42))
+
+# ML: for whiting and dab (the new species I added), I'll filter using a different method
+# Dab
+ggplot(cadab, aes(LngtCm, IndWgt)) +
+  geom_point() + 
+  facet_wrap(~Year) +
+  ggtitle("dab")
+
+cadab <- cadab |>
+  filter(!(LngtCm > 20 & IndWgt < 50)) |> 
+  filter(!(LngtCm > 30 & IndWgt < 160))
+  
+ggplot(cadab, aes(LngtCm, IndWgt)) +
+  geom_point() + 
+  facet_wrap(~Year) +
+  ggtitle("dab")
+
+# Turbot
+ggplot(catur, aes(LngtCm, IndWgt)) +
+  geom_point() + 
+  facet_wrap(~Year) +
+  ggtitle("turbot")
+
+catur <- catur |>
+  filter(LngtCm < 100)
+  
+ggplot(catur, aes(LngtCm, IndWgt)) +
+  geom_point() + 
+  facet_wrap(~Year) +
+  ggtitle("turbot")
+
+# Whiting
+ggplot(cawhi, aes(LngtCm, IndWgt)) +
+  geom_point() + 
+  facet_wrap(~Year) +
+  ggtitle("whiting")
+
+cawhi <- cawhi |>
+  filter(!(LngtCm < 30 & IndWgt > 300)) |> 
+  filter(!(LngtCm < 25 & IndWgt > 150))
+  
+ggplot(cawhi, aes(LngtCm, IndWgt)) +
+  geom_point() + 
+  facet_wrap(~Year) +
+  ggtitle("whiting")
+```
+
+Next we read in the individual data ("CA" data) from the Swedish data. We need this to convert CPUE in numbers to CPUE in weight later. Note we only have data that are not already on DATRAS for cod and flounder! And note that these CA data only go back to 1988.
+
+```{r CA from swedish data}
+######## load fiskdata2 (fd2) individual data for cod and flounder 
+cacodfd2 <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawlsurv_s_Torsk.csv"),sep=";")
+caflofd2 <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawlsurv_s_Skrubba.csv"),sep=";")
+
+cacodfd21 <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawl_surveys_(s)BITSCOD.csv"),sep=";")
+caflofd21 <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Fiskdata2/trawl_surveys_(s)BITSFLOUNDER.csv"),sep=";")
+
+
+###### merge them
+cacodfd2<- rbind(cacodfd2[,-17],cacodfd21[,c(1:17,19,22:24)])
+caflofd2<- rbind(caflofd2[,-17],caflofd21[,c(1:17,19,22:24)])
+
+###### change length in cm
+
+cacodfd2$Lengthcl <- cacodfd2$Lengthcl/10
+caflofd2$Lengthcl <- caflofd2$Lengthcl/10
+
+###### create a new index to match them
+
+cacodfd2$idx<-paste(cacodfd2$Date,cacodfd2$Haul,sep=".")
+caflofd2$idx<-paste(caflofd2$Date,caflofd2$Haul,sep=".")
+index <-   cbind(index, do.call("rbind", strsplit(as.character(index$index), "[.]")))
+index$idx2<-paste(index$"1",index$"3",sep=".")
+
+#### match lat and long
+
+cacodfd2$LATDD <- index[match(cacodfd2$idx, index$idx2),"LATDD"] 
+cacodfd2$LONGDD <- index[match(cacodfd2$idx, index$idx2),"LONGDD"] 
+caflofd2$LATDD <- index[match(caflofd2$idx, index$idx2),"LATDD"] 
+caflofd2$LONGDD <- index[match(caflofd2$idx, index$idx2),"LONGDD"] 
+
+##### remove invalid and calibration hauls
+
+cacodfd2 <- cacodfd2[!cacodfd2$Validity %in% type,]
+caflofd2 <- caflofd2[!caflofd2$Validity %in% type,]
+
+##### remove length =0 and weight=0 and NAs in lat and long
+
+cacodfd2 <- cacodfd2 |>
+  filter(Lengthcl!=0) |>
+  filter(!(is.na(Weight))) |>
+  filter(!(is.na(LATDD)))
+
+summary(cacodfd2)
+
+caflofd2 <- caflofd2 |>
+  filter(Lengthcl!=0) |>
+  filter(!(is.na(Weight))) |>
+  filter(!(is.na(LATDD)))
+
+summary(caflofd2)
+
+
+##### match ICES rect
+caflofd2$Rect <- mapplots::ices.rect2(caflofd2$LONGDD, caflofd2$LATDD)
+cacodfd2$Rect <- mapplots::ices.rect2(cacodfd2$LONGDD, cacodfd2$LATDD)
+
+##### SD
+pts <- SpatialPoints(cbind(caflofd2$LONGDD, caflofd2$LATDD), 
+                     proj4string = CRS(proj4string(xx)))
+
+caflofd2$SD <- over(pts, xx)$Area_27
+
+caflofd2 <- caflofd2 |> 
+  mutate(SD = factor(SD),
+         SD = fct_recode(SD,
+                         "20" = "3.a.20",
+                         "21" = "3.a.21",
+                         "22" = "3.c.22",
+                         "23" = "3.b.23",
+                         "24" = "3.d.24",
+                         "25" = "3.d.25",
+                         "26" = "3.d.26",
+                         "27" = "3.d.27",
+                         "28" = "3.d.28.1",
+                         "28" = "3.d.28.2",
+                         "29" = "3.d.29"))
+
+
+pts <- SpatialPoints(cbind(cacodfd2$LONGDD, cacodfd2$LATDD), 
+                     proj4string = CRS(proj4string(xx)))
+
+cacodfd2$SD <- over(pts, xx)$Area_27
+
+cacodfd2 <- cacodfd2 |> 
+  mutate(SD = factor(SD),
+         SD = fct_recode(SD,
+                         "20" = "3.a.20",
+                         "21" = "3.a.21",
+                         "22" = "3.c.22",
+                         "23" = "3.b.23",
+                         "24" = "3.d.24",
+                         "25" = "3.d.25",
+                         "26" = "3.d.26",
+                         "27" = "3.d.27",
+                         "28" = "3.d.28.1",
+                         "28" = "3.d.28.2",
+                         "29" = "3.d.29"))
+
+
+
+###### check for outliers
+
+ggplot(data=cacodfd2, aes(x=Lengthcl, y=Weight))+geom_point(color="red",size=1) +facet_wrap(~Year)+ggtitle("cod")
+ggplot(data=caflofd2, aes(x=Lengthcl, y=Weight))+geom_point(color="red",size=1) +facet_wrap(~Year)+ggtitle("flounder")
+
+ggplot(data=cacodfd2, aes(x=Lengthcl, y=Weight))+geom_point(color="red",size=1) +facet_grid(SD~Year)+ggtitle("cod")
+ggplot(data=caflofd2, aes(x=Lengthcl, y=Weight))+geom_point(color="red",size=1) +facet_grid(SD~Year)+ggtitle("flounder")
+
+
+###### clean outliers
+
+caflofd2 <- caflofd2 |>
+  filter(!(Year==2002 & Lengthcl== 10)) |>
+  filter(!(Year==2010 & Lengthcl== 22 & Weight==396)) |>
+  filter(!(Year==2016 & Lengthcl== 19 & Weight==720)) |>
+  filter(!(Year==2016 & Lengthcl== 37 & Weight==206)) |>
+  filter(!(Year==2008 & Lengthcl== 39 & Weight==258))
+
+
+###### merge L/W of cod and flounder
+# ML: I want to keep the coordinates in the individual files!
+
+lwcod <- cacod |>
+  filter(Year<=2016) |>
+  dplyr::select(Year, SD,LngtCm,IndWgt, haul.id) |>
+  left_join(HHdata |>
+              dplyr::select(haul.id, lon, lat), by = "haul.id") |> # ML: adding lat-lon!
+  dplyr::select(-haul.id)
+
+lwflo <- caflo |>
+  filter(Year<=2016) |>
+  dplyr::select(Year, SD,LngtCm,IndWgt, haul.id) |>
+  left_join(HHdata |>
+              dplyr::select(haul.id, lon, lat), by = "haul.id") |> # ML: adding lat-lon!
+  dplyr::select(-haul.id)
+
+lwcod2 <- cacodfd2 |>
+  dplyr::select(Year, SD,Lengthcl,Weight, LONGDD, LATDD) |> # ML: keeping lat-lon!
+  rename(lat = LATDD, 
+         lon = LONGDD)
+
+names(lwcod2) <- names(lwcod)
+
+lwflo2 <- caflofd2 |>
+  dplyr::select(Year, SD,Lengthcl,Weight, LONGDD, LATDD) |> # ML: keeping lat-lon!
+  rename(lat = LATDD, 
+         lon = LONGDD)
+
+names(lwflo2) <- names(lwflo)
+
+lwcodT <- rbind(lwcod,lwcod2)
+lwfloT <- rbind(lwflo,lwflo2)
+
+###### check for outliers
+
+ggplot(data=lwcodT, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=3) +facet_wrap(~Year)+ggtitle("cod")
+ggplot(data=lwfloT, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=3) +facet_wrap(~Year)+ggtitle("flounder")
+
+ggplot(data=lwcodT, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=3) +facet_grid(SD~Year)+ggtitle("cod")
+ggplot(data=lwfloT, aes(x=LngtCm, y=IndWgt))+geom_point(color="red",size=3) +facet_grid(SD~Year)+ggtitle("flounder")
+```
+
+Read the historical Latvian data. Note, here we also only have cod and flounder
+
+```{r historical latvian data}
+######## Historical Latvian data
+
+####### HH_LAT 
+
+HH_LAT <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Datras/Historic Latvian/HH_LAT.csv"), sep=";")
+
+names(HH_LAT)
+
+#### create haul.id
+
+HH_LAT$haul.id <- paste(HH_LAT$Year,HH_LAT$Quarter,HH_LAT$Country,HH_LAT$Ship,HH_LAT$Gear,HH_LAT$StNo,HH_LAT$HaulNo,sep=":")
+
+HH_LAT$haul.id <- factor(HH_LAT$haul.id)
+
+levels(HH_LAT$haul.id)
+
+
+###### select just valid, additional and no oxygen hauls 
+
+HH_LAT <- HH_LAT |>
+  filter(HaulVal %in% c("A","N","V"))
+
+##### select lat and long
+
+HH_LAT$lat <- HH_LAT$ShootLat
+HH_LAT$lon <- HH_LAT$ShootLong
+
+##### fix one hauls that seems to south
+
+HH_LAT$lat[HH_LAT$haul.id == "1978:1:LAT:4576:LBT:3:5"] <- 54.78
+HH_LAT$ShootLat[HH_LAT$haul.id == "1978:1:LAT:4576:LBT:3:5"] <- 54.78
+HH_LAT$HaulLat[HH_LAT$haul.id == "1978:1:LAT:4576:LBT:3:5"] <- 54.81
+
+
+####### fix SD and ICES rect
+
+
+pts <- SpatialPoints(cbind(HH_LAT$lon, HH_LAT$lat), 
+                     proj4string = CRS(proj4string(xx)))
+
+HH_LAT$SD <- over(pts, xx)$Area_27
+
+HH_LAT <- HH_LAT |> 
+  mutate(SD = factor(SD),
+         SD = fct_recode(SD,
+                         "20" = "3.a.20",
+                         "21" = "3.a.21",
+                         "22" = "3.c.22",
+                         "23" = "3.b.23",
+                         "24" = "3.d.24",
+                         "25" = "3.d.25",
+                         "26" = "3.d.26",
+                         "27" = "3.d.27",
+                         "28" = "3.d.28.1",
+                         "28" = "3.d.28.2",
+                         "29" = "3.d.29"))
+
+HH_LAT$Rect <- mapplots::ices.rect2(HH_LAT$lon, HH_LAT$lat)
+
+HH_LAT
+
+
+###### remove pelagic gear LPT
+
+HH_LAT <- HH_LAT[!HH_LAT$Gear== "LPT",]
+
+summary(HH_LAT)
+
+##### there are 2 hauls with no depth registered. I will just put an aprox depth 
+
+HH_LAT[HH_LAT$Depth== "-9",]
+HH_LAT$Depth[HH_LAT$haul.id == "1981:4:LAT:ZBA:LBT:11:4"] <- 10
+HH_LAT$Depth[HH_LAT$haul.id == "1982:1:LAT:ZBA:LBT:3:27"] <- 18
+
+
+
+####### HL_LAT
+
+HL_LAT <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Datras/Historic Latvian/HL_LAT.csv"), sep=";")
+
+HL_LAT |> 
+  summarise(n = n(), .by = Species) |> 
+  arrange(desc(n))
+
+names(HL_LAT)
+
+#### create haul.id
+
+HL_LAT$haul.id <- paste(HL_LAT$Year,HL_LAT$Quarter,HL_LAT$Country,HL_LAT$Ship,HL_LAT$Gear,HL_LAT$StNo,HL_LAT$HaulNo,sep=":")
+
+HL_LAT$haul.id <- factor(HL_LAT$haul.id)
+
+levels(HL_LAT$haul.id)
+
+
+###### select just the hauls in HH_LAT
+
+HL_LAT <- HL_LAT[HL_LAT$haul.id %in% HH_LAT$haul.id,]
+
+
+#### match haul SD, rect, haul validity, StdSpecRecCode and BycSpecRecCode and haul duration
+
+HL_LAT$SD <- HH_LAT[match(HL_LAT$haul.id, HH_LAT$haul.id),"SD"] 
+HL_LAT$Rect <- HH_LAT[match(HL_LAT$haul.id, HH_LAT$haul.id),"Rect"] 
+HL_LAT$HaulVal <- HH_LAT[match(HL_LAT$haul.id, HH_LAT$haul.id),"HaulVal"] 
+HL_LAT$StdSpecRecCode <- HH_LAT[match(HL_LAT$haul.id, HH_LAT$haul.id),"StdSpecRecCode"] 
+HL_LAT$BycSpecRecCode <- HH_LAT[match(HL_LAT$haul.id, HH_LAT$haul.id),"BycSpecRecCode"] 
+HL_LAT$HaulDur <- HH_LAT[match(HL_LAT$haul.id, HH_LAT$haul.id),"HaulDur"] 
+HL_LAT$DataType <- HH_LAT[match(HL_LAT$haul.id, HH_LAT$haul.id),"DataType"] 
+
+
+summary(HL_LAT$HaulVal)
+summary(HH_LAT$HaulVal)
+
+####### select different species
+
+HL_LATcod <- HL_LAT |>
+  filter(Species=="Gadus morhua")
+
+HL_LATflo <- HL_LAT  |>
+  filter(Species=="Platichthys flesus")
+
+
+##### add 0 catches
+#### common columns for merging
+comcol <- intersect(names(HL_LATcod), names(HH_LAT))
+comcol <- comcol[-c(1)]
+
+##### for cod add 0s and then remove lines with SpecVal = 0
+HL_LATcod0 <- merge(HL_LATcod,HH_LAT[,comcol],by = comcol, all = TRUE)
+summary(HL_LATcod0)
+
+HL_LATcod0$SpecVal[is.na(HL_LATcod0$SpecVal)] <- "zeroCatch"
+HL_LATcod0$SpecVal <- factor(HL_LATcod0$SpecVal)
+
+HL_LATcod0 <-  HL_LATcod0 |>
+  filter(SpecVal!="0")
+
+HL_LATcod0$Species<-"Gadus morhua"
+
+##### for flounder add 0s, remove them if StdSpecRecCode !=1 and then remove lines with SpecVal = 0
+HL_LATflo0 <- merge(HL_LATflo,HH_LAT[,comcol],by = comcol, all = TRUE)
+summary(HL_LATflo0)
+
+HL_LATflo0 <- HL_LATflo0[!(is.na(HL_LATflo0$Species) & HL_LATflo0$StdSpecRecCode != 1),] 
+
+HL_LATflo0$SpecVal[is.na(HL_LATflo0$SpecVal)] <- "zeroCatch"
+HL_LATflo0$SpecVal <- factor(HL_LATflo0$SpecVal)
+
+HL_LATflo0 <-  HL_LATflo0 |>
+  filter(SpecVal!="0")
+
+HL_LATflo0$Species<-"Platichthys flesus"
+
+
+#### check number of hauls for each species
+n_distinct(HH_LAT$haul.id)
+n_distinct(HL_LATcod0$haul.id)
+n_distinct(HL_LATflo0$haul.id)
+
+
+
+####### create CPUE unstandardized for SpecVal=1. If DataType = C then CPUEun=HLNoAtLngt, if DataType=R then CPUEun=HLNoAtLngt/(HaulDur/60), if DataType = S then CPUEun=(HLNoAtLngt*SubFactor)/(HaulDur/60). If SpecVal="zeroCatch" then CPUEun=0, if SpecVal=4 we need to decide.
+
+
+#### cod
+HL_LATcod0 <- HL_LATcod0 |>
+  mutate(CPUEun= ifelse(SpecVal=="1" & DataType == "C",HLNoAtLngt,ifelse(SpecVal=="1" & DataType == "R",HLNoAtLngt/(HaulDur/60),ifelse(SpecVal=="1" & DataType == "S",(HLNoAtLngt*SubFactor)/(HaulDur/60),ifelse(SpecVal=="zeroCatch",0,NA)))))
+
+##### create the data.frame with records without LFD
+
+HL_LATcod4 <- HL_LATcod0 |>
+  filter(SpecVal=="4")
+
+##### create the HL with LFD
+
+HL_LATcodL <- HL_LATcod0 |>
+  filter(!SpecVal=="4")
+
+#### flounder
+HL_LATflo0 <- HL_LATflo0 |>
+  mutate(CPUEun= ifelse(SpecVal=="1" & DataType == "C",HLNoAtLngt,ifelse(SpecVal=="1" & DataType == "R",HLNoAtLngt/(HaulDur/60),ifelse(SpecVal=="1" & DataType == "S",(HLNoAtLngt*SubFactor)/(HaulDur/60),ifelse(SpecVal=="zeroCatch",0,NA)))))
+
+##### create the data.frame with records without LFD
+
+HL_LATflo4 <- HL_LATflo0 |>
+  filter(SpecVal=="4")
+
+##### create the HL with LFD
+
+HL_LATfloL <- HL_LATflo0 |>
+  filter(!SpecVal=="4")
+
+######### CA_LAT
+
+CA_LAT <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Datras/Historic Latvian/CA_LAT.csv"), sep=";")
+
+CA_LAT |> 
+  summarise(n = n(), .by = Species) |> 
+  arrange(desc(n))
+
+names(CA_LAT)
+
+#### create haul.id
+
+CA_LAT$haul.id <- paste(CA_LAT$Year,CA_LAT$Quarter,CA_LAT$Country,CA_LAT$Ship,CA_LAT$Gear,CA_LAT$StNo,CA_LAT$HaulNo,sep=":")
+
+CA_LAT$haul.id <- factor(CA_LAT$haul.id)
+
+levels(CA_LAT$haul.id)
+
+
+###### select just the hauls in HH_LAT
+
+CA_LAT <- CA_LAT[CA_LAT$haul.id %in% HH_LAT$haul.id,]
+
+
+
+#### match haul SD, rect, haul validity
+
+CA_LAT$SD <- HH_LAT[match(CA_LAT$haul.id, HH_LAT$haul.id),"SD"] 
+CA_LAT$Rect <- HH_LAT[match(CA_LAT$haul.id, HH_LAT$haul.id),"Rect"] 
+CA_LAT$HaulVal <- HH_LAT[match(CA_LAT$haul.id, HH_LAT$haul.id),"HaulVal"] 
+
+####### select different species remove missing individual weights or weight = 0
+CA_LATcod <- CA_LAT |>
+  filter(Species=="Gadus morhua" & IndWgt != 0 & !(is.na(IndWgt))) |>
+  left_join(HH_LAT |> dplyr::select(haul.id, lat, lon)) # ML: add in coordinates!
+
+CA_LATflo <- CA_LAT  |>
+  filter(Species=="Platichthys flesus" & IndWgt != 0 & !(is.na(IndWgt))) |>
+  left_join(HH_LAT |> dplyr::select(haul.id, lat, lon)) # ML: add in coordinates!
+
+
+###### check for outliers
+
+ggplot(data=CA_LATcod, aes(x=LngtClas, y=IndWgt))+geom_point(color="red",size=3) +facet_wrap(~Year)+ggtitle("cod")
+ggplot(data=CA_LATflo, aes(x=LngtClas, y=IndWgt))+geom_point(color="red",size=3) +facet_wrap(~Year)+ggtitle("flounder")
+
+
+ggplot(data=CA_LATcod, aes(x=LngtClas, y=IndWgt))+geom_point(color="red",size=3) +facet_grid(SD~Year)+ggtitle("cod")
+ggplot(data=CA_LATflo, aes(x=LngtClas, y=IndWgt))+geom_point(color="red",size=3) +facet_grid(SD~Year)+ggtitle("flounder")
+
+
+###### clean outliers
+
+CA_LATcod <- CA_LATcod |>
+  filter(!(haul.id=="1990:1:LAT:ZBA:LBT:3:12" & LngtClas== 107)) |>
+  filter(!(haul.id=="1978:2:LAT:4576:LBT:4:1" & LngtClas== 83)) |>
+  filter(!(haul.id=="1978:2:LAT:4576:LBT:4:3" & LngtClas== 85)) |>
+  filter(!(haul.id=="1983:2:LAT:ZBA:LBT:4:23" & IndWgt == 7410)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:1:24" & LngtClas== 97)) |>
+  filter(!(haul.id=="1985:1:LAT:ZBA:LBT:1:20" & LngtClas== 52 & IndWgt == 3805)) |>
+  filter(!(haul.id=="1989:1:LAT:ZBA:LBT:3:13" & LngtClas== 47 & IndWgt == 11355)) |>
+  filter(!(haul.id=="1989:1:LAT:ZBA:LBT:1:22" & LngtClas== 49 & IndWgt == 4030)) |>
+  filter(!(haul.id=="1989:1:LAT:ZBA:LBT:3:2" & LngtClas== 66 & IndWgt == 980)) |>
+  filter(!(haul.id=="1989:4:LAT:ZBA:LBT:12:6" & LngtClas== 88 & IndWgt == 2950)) |>
+  filter(!(haul.id=="1982:4:LAT:ZBA:LBT:11:34" & LngtClas== 83 & IndWgt == 400)) |>
+  filter(!(haul.id=="1980:2:LAT:ZBA:LBT:4:25" & LngtClas== 60 & IndWgt == 300)) |>
+  filter(!(haul.id=="1980:2:LAT:ZBA:LBT:4:22" & LngtClas== 54 & IndWgt == 570)) |>
+  filter(!(haul.id=="1982:1:LAT:ZBA:LBT:3:19" & LngtClas== 63 & IndWgt == 4680)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:1:14" & LngtClas== 99 & IndWgt == 560)) |>
+  filter(!(haul.id=="1984:2:LAT:ZBA:LBT:6:16" & LngtClas== 44 & IndWgt == 7300)) |>
+  filter(!(haul.id=="1984:2:LAT:ZBA:LBT:6:16" & LngtClas== 41 & IndWgt == 6100)) |>
+  filter(!(haul.id=="1987:2:LAT:ZBA:LBT:4:26" & LngtClas== 32 & IndWgt == 2700)) |>
+  filter(!(haul.id=="1983:2:LAT:ZBA:LBT:4:11" & LngtClas== 70 & IndWgt == 200)) |>
+  filter(!(haul.id=="1983:2:LAT:ZBA:LBT:4:11" & LngtClas== 4 & IndWgt == 550))
+
+
+
+
+
+CA_LATflo <- CA_LATflo |>
+  filter(!(haul.id=="1990:1:LAT:ZBA:LBT:3:27" & LngtClas== 28 & IndWgt == 23.6)) |>
+  filter(!(haul.id=="1990:1:LAT:ZBA:LBT:3:14" & LngtClas== 21 & IndWgt == 950)) |>
+  filter(!(haul.id=="1983:1:LAT:ZBA:LBT:3:14" & LngtClas== 23 & IndWgt == 360)) |>
+  filter(!(haul.id=="1986:1:LAT:BPE:LBT:3:23" & LngtClas== 26 & IndWgt == 760)) |>
+  filter(!(haul.id=="1989:1:LAT:ZBA:LBT:3:13" & LngtClas== 27 & IndWgt == 960)) |>
+  filter(!(haul.id=="1989:2:LAT:ZBA:LBT:4:23" & LngtClas== 29 & IndWgt == 32.8)) |>
+  filter(!(haul.id=="1990:1:LAT:ZBA:LBT:3:31" & LngtClas== 28 & IndWgt == 894)) |>
+  filter(!(haul.id=="1981:4:LAT:ZBA:LBT:11:41" & LngtClas== 30 & IndWgt == 715)) |>
+  filter(!(haul.id=="1982:1:LAT:ZBA:LBT:3:31" & LngtClas== 19 & IndWgt == 340)) |>
+  filter(!(haul.id=="1983:2:LAT:ZBA:LBT:4:13" & LngtClas== 29 & IndWgt == 28.6)) |>
+  filter(!(haul.id=="1983:2:LAT:ZBA:LBT:4:13" & LngtClas== 35 & IndWgt == 160)) |>
+  filter(!(haul.id=="1986:2:LAT:BPE:LBT:5:9" & LngtClas== 35 & IndWgt == 46.7)) |>
+  filter(!(haul.id=="1986:2:LAT:BPE:LBT:5:5" & LngtClas== 27 & IndWgt == 533)) |>
+  filter(!(haul.id=="1985:2:LAT:ZBA:LBT:4:27" & LngtClas== 31 & IndWgt == 27.4)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 24 & IndWgt == 620)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 24 & IndWgt == 360)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:45" & LngtClas== 22 & IndWgt == 320)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 26 & IndWgt == 780)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 28 & IndWgt == 770)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 26 & IndWgt == 670)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 26 & IndWgt == 600)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 29 & IndWgt == 540)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 29 & IndWgt == 530)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:45" & LngtClas== 32 & IndWgt == 134)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 35 & IndWgt == 134)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 34 & IndWgt == 200)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 35 & IndWgt == 950)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 35 & IndWgt == 770)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 36 & IndWgt == 250)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 36 & IndWgt == 300)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 38 & IndWgt == 340)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 37 & IndWgt == 370)) |>
+  filter(!(haul.id=="1984:2:LAT:27:LBT:4:23" & LngtClas== 37 & IndWgt == 380)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:45" & LngtClas== 36 & IndWgt == 410)) |>
+  filter(!(haul.id=="1984:2:LAT:27:LBT:4:35" & LngtClas== 36 & IndWgt == 450)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 41 & IndWgt == 200)) |>
+  filter(!(haul.id=="1984:1:LAT:ZBA:LBT:3:47" & LngtClas== 42 & IndWgt == 260)) |>
+  filter(!(haul.id=="1984:2:LAT:27:LBT:4:22" & LngtClas== 42 & IndWgt == 620)) 
+```
+
+Combine all individual data (CA) and save cod and flounder. Since the rest of the species only have what is available on DATRAS, there's no need to save them.
+
+```{r save historical CA data for cod and flounder}
+###### merge all the CA
+lwcod3 <- CA_LATcod |>
+  filter(Year<=2016) |>
+  dplyr::select(Year, SD,LngtClas,IndWgt, lon, lat)
+
+lwflo3 <- CA_LATflo |>
+  filter(Year<=2016) |>
+  dplyr::select(Year, SD,LngtClas,IndWgt, lon, lat)
+
+names(lwcod3) <- names(lwcod2)
+names(lwflo3) <- names(lwflo2)
+
+lwcodTotal <- rbind(lwcod,lwcod2,lwcod3)
+lwfloTotal <- rbind(lwflo,lwflo2,lwflo3)
+
+# Plot in space
+lwcodTotal |> 
+  summarise(n = n(), .by = c(Year, lat, lon)) |> 
+  ggplot(aes(lon, lat, color = n)) +
+  geom_point() + 
+  facet_wrap(~Year, ncol = 6) + 
+  coord_sf()
+
+lwfloTotal |> 
+  summarise(n = n(), .by = c(Year, lat, lon)) |> 
+  ggplot(aes(lon, lat, color = n)) +
+  geom_point() + 
+  facet_wrap(~Year, ncol = 6) + 
+  coord_sf()
+
+lw_data <- bind_rows(lwcodTotal |> mutate(species = "cod"),
+                     lwfloTotal |> mutate(species = "flounder"))
+
+write_csv(lw_data, paste0(home, "/trawl-data-1978-2015/historical-trawl/output/lw_data.csv"))
+```
+
+Now calculate CPUE in terms of biomass by joining in the length-weight data to the catch data. Note, here it's done by each survey separately before rbinding them, so it's a bit repetitive.
+
+```{r convert CPUE to biomass}
+lwcodTotal$LngtCm
+lwcodTotal$IndWgt
+
+##### Transform L and W in Log scale
+lwcodTotal$logL <- log(lwcodTotal$LngtCm)
+lwcodTotal$logW <- log(lwcodTotal$IndWgt)
+
+lwfloTotal$logL <- log(lwfloTotal$LngtCm)
+lwfloTotal$logW <- log(lwfloTotal$IndWgt)
+
+# Here I deviate a bit. I fit only year-specific LW parameters (partly because the code doesn't run)
+lwCOD <- lwcodTotal %>% 
+  split(.$Year) |> 
+  purrr::map(~lm(logW ~ logL, data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  dplyr::select(Year, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(aL = exp(`(Intercept)`)) |> 
+  dplyr::select(-`(Intercept)`) |> 
+  rename(b = logL) |> 
+  filter(b > 2 & b < 4) |>
+  filter(aL > 0.00001 & aL < 0.1) |> 
+  mutate(Year = as.numeric(Year))
+  
+lwFLO <- lwfloTotal %>%
+  split(.$Year) |> 
+  purrr::map(~lm(logW ~ logL, data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  dplyr::select(Year, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(aL = exp(`(Intercept)`)) |> 
+  dplyr::select(-`(Intercept)`) |> 
+  rename(b = logL) |> 
+  filter(b > 2 & b < 4) |>
+  filter(aL > 0.00001 & aL < 0.1) |> 
+  mutate(Year = as.numeric(Year))
+
+# Now do the other species (that only have CA from DATRAS)
+lwPLA <- capla %>%
+  split(.$Year) |> 
+  purrr::map(~lm(log(IndWgt) ~ log(LngtCm), data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  dplyr::select(Year, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(aL = exp(`(Intercept)`)) |> 
+  dplyr::select(-`(Intercept)`) |> 
+  rename(b = `log(LngtCm)`) |> 
+  filter(b > 2 & b < 4) |>
+  filter(aL > 0.00001 & aL < 0.1) |> 
+  mutate(Year = as.numeric(Year))
+
+lwDAB <- cadab %>%
+  split(.$Year) |> 
+  purrr::map(~lm(log(IndWgt) ~ log(LngtCm), data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  dplyr::select(Year, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(aL = exp(`(Intercept)`)) |> 
+  dplyr::select(-`(Intercept)`) |> 
+  rename(b = `log(LngtCm)`) |> 
+  filter(b > 2 & b < 4) |>
+  filter(aL > 0.00001 & aL < 0.1) |> 
+  mutate(Year = as.numeric(Year))
+
+lwTUR <- catur %>%
+  split(.$Year) |> 
+  purrr::map(~lm(log(IndWgt) ~ log(LngtCm), data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  dplyr::select(Year, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(aL = exp(`(Intercept)`)) |> 
+  dplyr::select(-`(Intercept)`) |> 
+  rename(b = `log(LngtCm)`) |> 
+  filter(b > 2 & b < 4) |>
+  filter(aL > 0.00001 & aL < 0.1) |> 
+  mutate(Year = as.numeric(Year))
+
+lwWHI <- cawhi %>% 
+  split(.$Year) |> 
+  purrr::map(~lm(log(IndWgt) ~ log(LngtCm), data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  dplyr::select(Year, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(aL = exp(`(Intercept)`)) |> 
+  dplyr::select(-`(Intercept)`) |> 
+  rename(b = `log(LngtCm)`) |> 
+  filter(b > 2 & b < 4) |>
+  filter(aL > 0.00001 & aL < 0.1) |> 
+  mutate(Year = as.numeric(Year))
+
+# Fill in missing years with the average parameters!
+all_years <- tibble(Year = 1900:2017)
+
+lwCOD <- lwCOD |>
+  right_join(all_years) |> 
+  mutate(b = replace_na(b, mean(b, na.rm = TRUE)),
+         aL = replace_na(aL, mean(aL, na.rm = TRUE)))
+
+lwFLO <- lwFLO |>
+  right_join(all_years) |> 
+  mutate(b = replace_na(b, mean(b, na.rm = TRUE)),
+         aL = replace_na(aL, mean(aL, na.rm = TRUE)))
+
+lwPLA <- lwPLA |>
+  right_join(all_years) |> 
+  mutate(b = replace_na(b, mean(b, na.rm = TRUE)),
+         aL = replace_na(aL, mean(aL, na.rm = TRUE)))
+
+lwDAB <- lwDAB |>
+  right_join(all_years) |> 
+  mutate(b = replace_na(b, mean(b, na.rm = TRUE)),
+         aL = replace_na(aL, mean(aL, na.rm = TRUE)))
+
+lwTUR <- lwTUR |>
+  right_join(all_years) |> 
+  mutate(b = replace_na(b, mean(b, na.rm = TRUE)),
+         aL = replace_na(aL, mean(aL, na.rm = TRUE)))
+
+lwWHI <- lwWHI |>
+  right_join(all_years) |> 
+  mutate(b = replace_na(b, mean(b, na.rm = TRUE)),
+         aL = replace_na(aL, mean(aL, na.rm = TRUE)))
+
+##### Calculate estimated weight and convert CPUE in Biomass
+
+hlcodL <- hlcodL |> left_join(lwCOD, by = "Year")
+
+hlcodL$estWyear <-(hlcodL$aL*hlcodL$LngtCm^hlcodL$b) / 1000
+
+hlcodL$CPUEunBIOyear <- hlcodL$CPUEun*hlcodL$estWyear
+
+hlcodL$CPUEunBIOyear[hlcodL$SpecVal=="zeroCatch"] <- 0
+
+# hist(hlcodL$CPUEunBIOyear)
+# hist(hlcodL$CPUEun)
+# quantile(hlcodL$CPUEunBIOyear)
+# quantile(hlcodL$CPUEun)
+# plot(hlcodL$CPUEunBIOyear ~ hlcodL$CPUEun)
+# hlcodL |> filter(CPUEunBIOyear > 100000)
+# plot(x = c(10:100),
+#      y = (mean(lwCOD$aL)*c(10:100)^mean(lwCOD$b))/1000)
+
+##### flounder hlfloL
+hlfloL <- hlfloL |> left_join(lwFLO, by = "Year")
+
+hlfloL$estWyear <-(hlfloL$aL*hlfloL$LngtCm^hlfloL$b) / 1000
+
+hlfloL$CPUEunBIOyear <- hlfloL$CPUEun*hlfloL$estWyear
+
+hlfloL$CPUEunBIOyear[hlfloL$SpecVal=="zeroCatch"] <- 0
+
+
+##### plaice hlfloL
+hlplaL <- hlplaL |> left_join(lwPLA, by = "Year")
+
+hlplaL$estWyear <-(hlplaL$aL*hlplaL$LngtCm^hlplaL$b) / 1000
+
+hlplaL$CPUEunBIOyear <- hlplaL$CPUEun*hlplaL$estWyear
+
+hlplaL$CPUEunBIOyear[hlplaL$SpecVal=="zeroCatch"] <- 0
+
+
+##### dab hlfloL
+hldabL <- hldabL |> left_join(lwDAB, by = "Year")
+
+hldabL$estWyear <-(hldabL$aL*hldabL$LngtCm^hldabL$b) / 1000
+
+hldabL$CPUEunBIOyear <- hldabL$CPUEun*hldabL$estWyear
+
+hldabL$CPUEunBIOyear[hldabL$SpecVal=="zeroCatch"] <- 0
+
+
+##### turbot hlfloL
+hlturL <- hlturL |> left_join(lwTUR, by = "Year")
+
+hlturL$estWyear <-(hlturL$aL*hlturL$LngtCm^hlturL$b) / 1000
+
+hlturL$CPUEunBIOyear <- hlturL$CPUEun*hlturL$estWyear
+
+hlturL$CPUEunBIOyear[hlturL$SpecVal=="zeroCatch"] <- 0
+
+
+##### whiting hlfloL
+hlwhiL <- hlwhiL |> left_join(lwWHI, by = "Year")
+
+hlwhiL$estWyear <-(hlwhiL$aL*hlwhiL$LngtCm^hlwhiL$b) / 1000
+
+hlwhiL$CPUEunBIOyear <- hlwhiL$CPUEun*hlwhiL$estWyear
+
+hlwhiL$CPUEunBIOyear[hlwhiL$SpecVal=="zeroCatch"] <- 0
+
+
+
+###### cod DataStuart (surveys script has to be run before)
+
+codswe <- DataStuart[DataStuart$species=="Gadus morhua",]
+
+codswe <- codswe |> left_join(lwCOD |> rename(year = Year), by = "year")
+
+codswe$estWyear <-(codswe$aL*codswe$Lengthcl^codswe$b) / 1000
+
+codswe$CPUEunBIOyear <- codswe$CPUEun*codswe$estWyear
+
+codswe$CPUEstBIOyear <- codswe$CPUEst*codswe$estWyear
+
+
+# change NAs in CPUEs with 0s
+codswe$CPUEunBIOyear[is.na(codswe$CPUEunBIOyear)] <- 0
+codswe$CPUEstBIOyear[is.na(codswe$CPUEstBIOyear)] <- 0
+
+###### flounder DataStuart
+floswe <- DataStuart[DataStuart$species=="Platichthys flesus",]
+
+floswe <- floswe |> left_join(lwFLO |> rename(year = Year), by = "year")
+floswe$estWyear <-floswe$aL*floswe$Lengthcl^floswe$b
+
+floswe$CPUEunBIOyear <- floswe$CPUEun*floswe$estWyear
+
+floswe$CPUEstBIOyear <- floswe$CPUEst*floswe$estWyear
+
+# change NAs in CPUEs with 0s
+floswe$CPUEunBIOyear[is.na(floswe$CPUEunBIOyear)] <- 0
+floswe$CPUEstBIOyear[is.na(floswe$CPUEstBIOyear)] <- 0
+
+
+# ML: For species other than cod and flounder, use the average LW relationship for the historical data since we have no CA here...
+###### plaice DataStuart
+plaswe <- DataStuart[DataStuart$species=="Pleuronectes platessa",]
+
+plaswe <- plaswe |> 
+  mutate(aL = mean(lwPLA$aL),
+         b = mean(lwPLA$b))
+
+plaswe$estWyear <-(plaswe$aL*plaswe$Lengthcl^plaswe$b) / 1000
+
+plaswe$CPUEunBIOyear <- plaswe$CPUEun*plaswe$estWyear
+
+plaswe$CPUEstBIOyear <- plaswe$CPUEst*plaswe$estWyear
+
+# change NAs in CPUEs with 0s
+plaswe$CPUEunBIOyear[is.na(plaswe$CPUEunBIOyear)] <- 0
+plaswe$CPUEstBIOyear[is.na(plaswe$CPUEstBIOyear)] <- 0
+
+###### dab DataStuart
+dabswe <- DataStuart[DataStuart$species=="Limanda limanda",]
+
+dabswe <- dabswe |> 
+  mutate(aL = mean(lwDAB$aL),
+         b = mean(lwDAB$b))
+
+dabswe$estWyear <-(dabswe$aL*dabswe$Lengthcl^dabswe$b) / 1000
+
+dabswe$CPUEunBIOyear <- dabswe$CPUEun*dabswe$estWyear
+
+dabswe$CPUEstBIOyear <- dabswe$CPUEst*dabswe$estWyear
+
+# change NAs in CPUEs with 0s
+dabswe$CPUEunBIOyear[is.na(dabswe$CPUEunBIOyear)] <- 0
+dabswe$CPUEstBIOyear[is.na(dabswe$CPUEstBIOyear)] <- 0
+
+###### turbot DataStuart
+turswe <- DataStuart[DataStuart$species=="Psetta maxima",]
+
+turswe <- turswe |> 
+  mutate(aL = mean(lwTUR$aL),
+         b = mean(lwTUR$b))
+
+turswe$estWyear <-(turswe$aL*turswe$Lengthcl^turswe$b) / 1000
+
+turswe$CPUEunBIOyear <- turswe$CPUEun*turswe$estWyear
+
+turswe$CPUEstBIOyear <- turswe$CPUEst*turswe$estWyear
+
+# change NAs in CPUEs with 0s
+turswe$CPUEunBIOyear[is.na(turswe$CPUEunBIOyear)] <- 0
+turswe$CPUEstBIOyear[is.na(turswe$CPUEstBIOyear)] <- 0
+
+
+###### whiting DataStuart
+whiswe <- DataStuart[DataStuart$species=="Merlangius merlangus",]
+
+whiswe <- whiswe |> 
+  mutate(aL = mean(lwWHI$aL),
+         b = mean(lwWHI$b))
+
+whiswe$estWyear <-(whiswe$aL*whiswe$Lengthcl^whiswe$b) / 1000
+
+whiswe$CPUEunBIOyear <- whiswe$CPUEun*whiswe$estWyear
+
+whiswe$CPUEstBIOyear <- whiswe$CPUEst*whiswe$estWyear
+
+# change NAs in CPUEs with 0s
+whiswe$CPUEunBIOyear[is.na(whiswe$CPUEunBIOyear)] <- 0
+whiswe$CPUEstBIOyear[is.na(whiswe$CPUEstBIOyear)] <- 0
+
+
+##### cod HL_LATcodL
+
+HL_LATcodL <- HL_LATcodL |>
+  filter(Year <=2016)
+
+HL_LATcodL <- HL_LATcodL |> left_join(lwCOD, by = "Year")
+
+HL_LATcodL$estWyear <-(HL_LATcodL$aL*HL_LATcodL$LngtClas^HL_LATcodL$b) / 1000
+
+HL_LATcodL$CPUEunBIOyear <- HL_LATcodL$CPUEun*HL_LATcodL$estWyear
+
+HL_LATcodL$CPUEunBIOyear[HL_LATcodL$SpecVal=="zeroCatch"] <- 0
+
+
+##### flounder HL_LATfloL
+
+HL_LATfloL <- HL_LATfloL |>
+  filter(Year <=2016)
+
+HL_LATfloL <- HL_LATfloL |> left_join(lwFLO, by = "Year")
+
+HL_LATfloL$estWyear <-(HL_LATfloL$aL*HL_LATfloL$LngtClas^HL_LATfloL$b) / 1000
+
+HL_LATfloL$CPUEunBIOyear <- HL_LATfloL$CPUEun*HL_LATfloL$estWyear
+
+HL_LATfloL$CPUEunBIOyear[HL_LATfloL$SpecVal=="zeroCatch"] <- 0
+
+
+##### create the date in HHdata and HH_LAT
+
+HHdata$date <- paste(HHdata$Year,HHdata$Month,HHdata$Day, sep="-")
+HH_LAT$date <- paste(HH_LAT$Year,HH_LAT$month,HH_LAT$Day, sep="-")
+```
+
+```{r standardize to TVL}
+##### read the sweep file with gear and speed info
+
+newsweep <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Datras/sweep_9116.csv"),sep=";",fileEncoding="windows-1252")
+
+sweep_LAT <- read.csv(paste0(home, "/trawl-data-1978-2015/historical-trawl/New/Datras/Historic Latvian/sweepLatvia.csv"), sep=";",fileEncoding="windows-1252")
+
+
+unique(newsweep$Year)
+
+
+######## merge Datras with Sweden and Latvia
+
+##### cod 
+
+names(hlcodL) 
+
+COD <- hlcodL[,c("Year", #"SDgroup",
+                 "Ship","HaulDur","SD", "haul.id", "LngtCm", "CPUEun", "Species", "Rect","HaulVal", #"auniL" ,"buni" ,
+                 "aL" , "b" , #"estWuni",
+                 "estWyear", #"CPUEunBIOuni"  ,
+                 "CPUEunBIOyear" )]
+
+#### match missing information
+
+COD$date <- factor(HHdata[match(COD$haul.id, HHdata$haul.id),"date"])
+COD$speed <- newsweep[match(COD$haul.id, newsweep$haul.id),"GroundSpeed"]
+COD$LATDD <- HHdata[match(COD$haul.id, HHdata$haul.id),"lat"]
+COD$LONGDD <- HHdata[match(COD$haul.id, HHdata$haul.id),"lon"]
+COD$Depth <- HHdata[match(COD$haul.id, HHdata$haul.id),"Depth"]
+COD$RSA <- newsweep[match(COD$haul.id, newsweep$haul.id),"RSA"]
+COD$RS <- newsweep[match(COD$haul.id, newsweep$haul.id),"RS"]
+COD$CPUEst <- COD$CPUEun*COD$RSA*COD$RS
+#COD$CPUEstBIOuni <- COD$CPUEunBIOuni*COD$RSA*COD$RS
+COD$CPUEstBIOyear <- COD$CPUEunBIOyear*COD$RSA*COD$RS
+
+summary(COD)
+
+names(COD)
+names(COD) <- c("year", "vessel", "trawl_time", "SD", "IDX", "Lengthcl", "CPUEun", "species", 
+                "Rect", "validity", "aL", "b", "estWyear", "CPUEunBIOyear", "date", "speed",
+                "LATDD", "LONGDD", "Depth", "RSA", "RS", "CPUEst", "CPUEstBIOyear")
+
+
+
+names(HL_LATcodL) 
+
+COD_LAT <- HL_LATcodL[,c("Year", "Ship", "HaulDur", "SD", "haul.id", "LngtClass", "CPUEun", 
+                         "Species", "Rect", "HaulVal", "aL", "b", "estWyear", "CPUEunBIOyear")]
+
+#### match missing information
+
+COD_LAT$date <- factor(HH_LAT[match(COD_LAT$haul.id, HH_LAT$haul.id),"date"])
+COD_LAT$speed <- sweep_LAT[match(COD_LAT$haul.id, sweep_LAT$haul.id),"GroundSpeed"]
+COD_LAT$LATDD <- HH_LAT[match(COD_LAT$haul.id, HH_LAT$haul.id),"lat"]
+COD_LAT$LONGDD <- HH_LAT[match(COD_LAT$haul.id, HH_LAT$haul.id),"lon"]
+COD_LAT$Depth <- HH_LAT[match(COD_LAT$haul.id, HH_LAT$haul.id),"Depth"]
+COD_LAT$RSA <- sweep_LAT[match(COD_LAT$haul.id, sweep_LAT$haul.id),"RSA"]
+COD_LAT$RS <- sweep_LAT[match(COD_LAT$haul.id, sweep_LAT$haul.id),"RS"]
+COD_LAT$CPUEst <- COD_LAT$CPUEun*COD_LAT$RSA*COD_LAT$RS
+#COD_LAT$CPUEstBIOuni <- COD_LAT$CPUEunBIOuni*COD_LAT$RSA*COD_LAT$RS
+COD_LAT$CPUEstBIOyear <- COD_LAT$CPUEunBIOyear*COD_LAT$RSA*COD_LAT$RS
+
+summary(COD_LAT)
+
+names(COD_LAT)
+names(COD_LAT) <- c("year", "vessel", "trawl_time", "SD", "IDX", "Lengthcl", "CPUEun",
+                    "species", "Rect", "validity", "aL", "b", "estWyear", "CPUEunBIOyear", "date",
+                    "speed", "LATDD", "LONGDD", "Depth", "RSA", "RS", "CPUEst", "CPUEstBIOyear")
+
+COD2 <- merge(COD |> mutate(source = "datras"),
+              codswe |> mutate(source = "sweden"),
+              all=T)
+COD2 <- merge(COD2,COD_LAT |> mutate(source = "latvia"),all=T)
+
+COD2$CPUEst[COD2$CPUEun==0] <- 0
+#COD2$CPUEstBIOuni[COD2$CPUEun==0] <- 0
+COD2$CPUEstBIOyear[COD2$CPUEun==0] <- 0
+
+### remove rows with no standardized CPUEs
+
+COD2 <- COD2[!is.na(COD2$CPUEst),]
+
+##### flounder
+
+names(hlfloL) 
+
+FLO <- hlfloL[, c("Year", "Ship", "HaulDur", "SD", "haul.id", "LngtCm", "CPUEun", "Species",
+                  "Rect", "HaulVal", "aL", "b", "estWyear", "CPUEunBIOyear")]
+
+#### match missing information
+
+FLO$date <- factor(HHdata[match(FLO$haul.id, HHdata$haul.id),"date"])
+FLO$speed <- newsweep[match(FLO$haul.id, newsweep$haul.id),"GroundSpeed"]
+FLO$LATDD <- HHdata[match(FLO$haul.id, HHdata$haul.id),"lat"]
+FLO$LONGDD <- HHdata[match(FLO$haul.id, HHdata$haul.id),"lon"]
+FLO$Depth <- HHdata[match(FLO$haul.id, HHdata$haul.id),"Depth"]
+FLO$RSA <- newsweep[match(FLO$haul.id, newsweep$haul.id),"RSA"]
+FLO$RS <- newsweep[match(FLO$haul.id, newsweep$haul.id),"RS"]
+FLO$CPUEst <- FLO$CPUEun*FLO$RSA*FLO$RS
+#FLO$CPUEstBIOuni <- FLO$CPUEunBIOuni*FLO$RSA*FLO$RS
+FLO$CPUEstBIOyear <- FLO$CPUEunBIOyear*FLO$RSA*FLO$RS
+
+summary(FLO)
+
+names(FLO)
+names(FLO) <- c("year", "vessel", "trawl_time", "SD", "IDX", "Lengthcl", "CPUEun", "species", 
+                "Rect", "validity", "aL", "b", "estWyear", "CPUEunBIOyear", "date", "speed", 
+                "LATDD", "LONGDD", "Depth", "RSA", "RS", "CPUEst", "CPUEstBIOyear")
+
+
+names(HL_LATfloL) 
+
+FLO_LAT <- HL_LATfloL[,c("Year", "Ship", "HaulDur", "SD", "haul.id", "LngtClass","CPUEun",
+                         "Species", "Rect", "HaulVal", "aL", "b", "estWyear", "CPUEunBIOyear" )]
+
+
+#### match missing information
+
+FLO_LAT$date <- factor(HH_LAT[match(FLO_LAT$haul.id, HH_LAT$haul.id),"date"])
+FLO_LAT$speed <- sweep_LAT[match(FLO_LAT$haul.id, sweep_LAT$haul.id),"GroundSpeed"]
+FLO_LAT$LATDD <- HH_LAT[match(FLO_LAT$haul.id, HH_LAT$haul.id),"lat"]
+FLO_LAT$LONGDD <- HH_LAT[match(FLO_LAT$haul.id, HH_LAT$haul.id),"lon"]
+FLO_LAT$Depth <- HH_LAT[match(FLO_LAT$haul.id, HH_LAT$haul.id),"Depth"]
+FLO_LAT$RSA <- sweep_LAT[match(FLO_LAT$haul.id, sweep_LAT$haul.id),"RSA"]
+FLO_LAT$RS <- sweep_LAT[match(FLO_LAT$haul.id, sweep_LAT$haul.id),"RS"]
+FLO_LAT$CPUEst <- FLO_LAT$CPUEun*FLO_LAT$RSA*FLO_LAT$RS
+#FLO_LAT$CPUEstBIOuni <- FLO_LAT$CPUEunBIOuni*FLO_LAT$RSA*FLO_LAT$RS
+FLO_LAT$CPUEstBIOyear <- FLO_LAT$CPUEunBIOyear*FLO_LAT$RSA*FLO_LAT$RS
+
+summary(FLO_LAT)
+
+names(FLO_LAT)
+names(FLO_LAT) <- c("year", "vessel", "trawl_time", "SD", "IDX", "Lengthcl", "CPUEun",
+                    "species", "Rect", "validity", "aL", "b", "estWyear", "CPUEunBIOyear",
+                    "date", "speed", "LATDD", "LONGDD", "Depth", "RSA", "RS", "CPUEst", "CPUEstBIOyear")
+
+
+FLO2 <- merge(FLO |> mutate(source = "datras"),
+              floswe |> mutate(source = "sweden"),
+              all=T)
+FLO2 <- merge(FLO2,FLO_LAT |> mutate(source = "latvia"),all=T)
+
+
+FLO2$CPUEst[FLO2$CPUEun==0] <- 0
+#FLO2$CPUEstBIOuni[FLO2$CPUEun==0] <- 0
+FLO2$CPUEstBIOyear[FLO2$CPUEun==0] <- 0
+
+### remove rows with no standardized CPUEs
+
+FLO2 <- FLO2[!is.na(FLO2$CPUEst),]
+
+
+##### plaice
+sort(names(hlplaL) )
+
+PLA <- hlplaL[,c("Year","Ship","HaulDur","SD", "haul.id", "LngtCm", "CPUEun", "Species", "Rect","HaulVal",
+                 #"auniL" , "buni" , "aL" ,
+                 "b" , #"estWuni" ,
+                 "estWyear",#"CPUEunBIOuni"  ,
+                 "CPUEunBIOyear" )]
+
+#### match missing information
+
+PLA$date <- factor(HHdata[match(PLA$haul.id, HHdata$haul.id),"date"])
+PLA$speed <- newsweep[match(PLA$haul.id, newsweep$haul.id),"GroundSpeed"]
+PLA$LATDD <- HHdata[match(PLA$haul.id, HHdata$haul.id),"lat"]
+PLA$LONGDD <- HHdata[match(PLA$haul.id, HHdata$haul.id),"lon"]
+PLA$Depth <- HHdata[match(PLA$haul.id, HHdata$haul.id),"Depth"]
+PLA$RSA <- newsweep[match(PLA$haul.id, newsweep$haul.id),"RSA"]
+PLA$RS <- newsweep[match(PLA$haul.id, newsweep$haul.id),"RS"]
+PLA$CPUEst <- PLA$CPUEun*PLA$RSA*PLA$RS
+#PLA$CPUEstBIOuni <- PLA$CPUEunBIOuni*PLA$RSA*PLA$RS
+PLA$CPUEstBIOyear <- PLA$CPUEunBIOyear*PLA$RSA*PLA$RS
+
+summary(PLA)
+
+names(PLA)
+names(PLA) <- c("year" ,"vessel" ,"trawl_time", "SD", "IDX","Lengthcl" ,"CPUEun","species",  "Rect" , "validity",
+                #"auniL" , "buni" , "aL"  ,
+                "b" ,
+                #"estWuni" ,
+                "estWyear" ,
+                #"CPUEunBIOuni" ,
+                "CPUEunBIOyear", "date" ,"speed" , "LATDD","LONGDD", "Depth","RSA" ,"RS" ,"CPUEst" , 
+                #"CPUEstBIOuni",
+                "CPUEstBIOyear")
+
+PLA <- merge(PLA |> mutate(source = "datras"),
+             plaswe |> mutate(source = "sweden"),
+             all=T)
+
+PLA$CPUEst[PLA$CPUEun==0] <- 0
+#PLA$CPUEstBIOuni[PLA$CPUEun==0] <- 0
+PLA$CPUEstBIOyear[PLA$CPUEun==0] <- 0
+
+### remove rows with no standardized CPUEs
+PLA <- PLA[!is.na(PLA$CPUEst),]
+
+
+##### dab
+sort(names(hldabL) )
+
+DAB <- hldabL[,c("Year","Ship","HaulDur","SD", "haul.id", "LngtCm", "CPUEun", "Species", "Rect","HaulVal",
+                 #"auniL" , "buni" , "aL" ,
+                 "b" , #"estWuni" ,
+                 "estWyear",#"CPUEunBIOuni"  ,
+                 "CPUEunBIOyear" )]
+
+#### match missing information
+
+DAB$date <- factor(HHdata[match(DAB$haul.id, HHdata$haul.id),"date"])
+DAB$speed <- newsweep[match(DAB$haul.id, newsweep$haul.id),"GroundSpeed"]
+DAB$LATDD <- HHdata[match(DAB$haul.id, HHdata$haul.id),"lat"]
+DAB$LONGDD <- HHdata[match(DAB$haul.id, HHdata$haul.id),"lon"]
+DAB$Depth <- HHdata[match(DAB$haul.id, HHdata$haul.id),"Depth"]
+DAB$RSA <- newsweep[match(DAB$haul.id, newsweep$haul.id),"RSA"]
+DAB$RS <- newsweep[match(DAB$haul.id, newsweep$haul.id),"RS"]
+DAB$CPUEst <- DAB$CPUEun*DAB$RSA*DAB$RS
+#DAB$CPUEstBIOuni <- DAB$CPUEunBIOuni*DAB$RSA*DAB$RS
+DAB$CPUEstBIOyear <- DAB$CPUEunBIOyear*DAB$RSA*DAB$RS
+
+summary(DAB)
+
+names(DAB)
+names(DAB) <- c("year" ,"vessel" ,"trawl_time", "SD", "IDX","Lengthcl" ,"CPUEun","species",  "Rect" , "validity",
+                #"auniL" , "buni" , "aL"  ,
+                "b" ,
+                #"estWuni" ,
+                "estWyear" ,
+                #"CPUEunBIOuni" ,
+                "CPUEunBIOyear", "date" ,"speed" , "LATDD","LONGDD", "Depth","RSA" ,"RS" ,"CPUEst" , 
+                #"CPUEstBIOuni",
+                "CPUEstBIOyear")
+
+DAB <- merge(DAB |> mutate(source = "datras"),
+             dabswe |> mutate(source = "sweden"),
+             all=T)
+
+DAB$CPUEst[DAB$CPUEun==0] <- 0
+#DAB$CPUEstBIOuni[DAB$CPUEun==0] <- 0
+DAB$CPUEstBIOyear[DAB$CPUEun==0] <- 0
+
+### remove rows with no standardized CPUEs
+DAB <- DAB[!is.na(DAB$CPUEst),]
+
+
+##### Turbot
+sort(names(hlturL) )
+
+TUR <- hlturL[,c("Year","Ship","HaulDur","SD", "haul.id", "LngtCm", "CPUEun", "Species", "Rect","HaulVal",
+                 #"auniL" , "buni" , "aL" ,
+                 "b" , #"estWuni" ,
+                 "estWyear",#"CPUEunBIOuni"  ,
+                 "CPUEunBIOyear" )]
+
+#### match missing information
+
+TUR$date <- factor(HHdata[match(TUR$haul.id, HHdata$haul.id),"date"])
+TUR$speed <- newsweep[match(TUR$haul.id, newsweep$haul.id),"GroundSpeed"]
+TUR$LATDD <- HHdata[match(TUR$haul.id, HHdata$haul.id),"lat"]
+TUR$LONGDD <- HHdata[match(TUR$haul.id, HHdata$haul.id),"lon"]
+TUR$Depth <- HHdata[match(TUR$haul.id, HHdata$haul.id),"Depth"]
+TUR$RSA <- newsweep[match(TUR$haul.id, newsweep$haul.id),"RSA"]
+TUR$RS <- newsweep[match(TUR$haul.id, newsweep$haul.id),"RS"]
+TUR$CPUEst <- TUR$CPUEun*TUR$RSA*TUR$RS
+#TUR$CPUEstBIOuni <- TUR$CPUEunBIOuni*TUR$RSA*TUR$RS
+TUR$CPUEstBIOyear <- TUR$CPUEunBIOyear*TUR$RSA*TUR$RS
+
+summary(TUR)
+
+names(TUR)
+names(TUR) <- c("year" ,"vessel" ,"trawl_time", "SD", "IDX","Lengthcl" ,"CPUEun","species",  "Rect" , "validity",
+                #"auniL" , "buni" , "aL"  ,
+                "b" ,
+                #"estWuni" ,
+                "estWyear" ,
+                #"CPUEunBIOuni" ,
+                "CPUEunBIOyear", "date" ,"speed" , "LATDD","LONGDD", "Depth","RSA" ,"RS" ,"CPUEst" , 
+                #"CPUEstBIOuni",
+                "CPUEstBIOyear")
+
+TUR <- merge(TUR |> mutate(source = "datras"),
+             turswe |> mutate(source = "sweden"),
+             all=T)
+
+TUR$CPUEst[TUR$CPUEun==0] <- 0
+#TUR$CPUEstBIOuni[TUR$CPUEun==0] <- 0
+TUR$CPUEstBIOyear[TUR$CPUEun==0] <- 0
+
+### remove rows with no standardized CPUEs
+TUR <- TUR[!is.na(TUR$CPUEst),]
+
+
+
+##### Whiting
+names(hlwhiL)
+
+WHI <- hlwhiL[,c("Year","Ship","HaulDur","SD", "haul.id", "LngtCm", "CPUEun", "Species", "Rect","HaulVal",
+                 #"auniL" , "buni" , "aL" ,
+                 "b" , #"estWuni" ,
+                 "estWyear",#"CPUEunBIOuni"  ,
+                 "CPUEunBIOyear" )]
+
+#### match missing information
+
+WHI$date <- factor(HHdata[match(WHI$haul.id, HHdata$haul.id),"date"])
+WHI$speed <- newsweep[match(WHI$haul.id, newsweep$haul.id),"GroundSpeed"]
+WHI$LATDD <- HHdata[match(WHI$haul.id, HHdata$haul.id),"lat"]
+WHI$LONGDD <- HHdata[match(WHI$haul.id, HHdata$haul.id),"lon"]
+WHI$Depth <- HHdata[match(WHI$haul.id, HHdata$haul.id),"Depth"]
+WHI$RSA <- newsweep[match(WHI$haul.id, newsweep$haul.id),"RSA"]
+WHI$RS <- newsweep[match(WHI$haul.id, newsweep$haul.id),"RS"]
+WHI$CPUEst <- WHI$CPUEun*WHI$RSA*WHI$RS
+#WHI$CPUEstBIOuni <- WHI$CPUEunBIOuni*WHI$RSA*WHI$RS
+WHI$CPUEstBIOyear <- WHI$CPUEunBIOyear*WHI$RSA*WHI$RS
+
+summary(WHI)
+
+names(WHI)
+names(WHI) <- c("year" ,"vessel" ,"trawl_time", "SD", "IDX","Lengthcl" ,"CPUEun","species",  "Rect" , "validity",
+                #"auniL" , "buni" , "aL"  ,
+                "b" ,
+                #"estWuni" ,
+                "estWyear" ,
+                #"CPUEunBIOuni" ,
+                "CPUEunBIOyear", "date" ,"speed" , "LATDD","LONGDD", "Depth","RSA" ,"RS" ,"CPUEst" , 
+                #"CPUEstBIOuni",
+                "CPUEstBIOyear")
+
+WHI <- merge(WHI |> mutate(source = "datras"),
+             whiswe |> mutate(source = "sweden"),
+             all=T)
+
+WHI$CPUEst[WHI$CPUEun==0] <- 0
+#WHI$CPUEstBIOuni[WHI$CPUEun==0] <- 0
+WHI$CPUEstBIOyear[WHI$CPUEun==0] <- 0
+
+### remove rows with no standardized CPUEs
+WHI <- WHI[!is.na(WHI$CPUEst),]
+
+###### remove hauls done with gears PEL and LPT
+
+pelagic <- c("1993:2:LAT:BPE:LPT:000001:30","1993:2:LAT:BPE:LPT:000001:31","1993:2:LAT:BPE:LPT:000001:32","1993:2:LAT:BPE:LPT:000001:33","1993:2:LAT:BPE:LPT:000001:34","1993:2:LAT:BPE:LPT:000001:35","2008:4:POL:BAL:PEL:26093:26","2008:4:POL:BAL:PEL:26130:25")
+
+COD2 <- COD2[!COD2$IDX %in% pelagic,]
+FLO2 <- FLO2[!FLO2$IDX %in% pelagic,]
+PLA <- PLA[!PLA$IDX %in% pelagic,]
+DAB <- DAB[!DAB$IDX %in% pelagic,]
+TUR <- TUR[!TUR$IDX %in% pelagic,]
+WHI <- WHI[!WHI$IDX %in% pelagic,]
+```
+
+```{r}
+# Now calculate CPUE PER LENGTH CLASS, then create the new unit, i.e.:  convert from kg of fish caught by trawling for 1 h a standard bottom swept area of 0.45km2 (using a TVL trawl with 75 m sweeps at the standard speed of three knots) to... kg of fish per km^2 by dividing with 0.45
+
+COD2 <- COD2 |> 
+  mutate(density = CPUEst / 0.45,
+         biomass_density = CPUEstBIOyear / 0.45,
+         month = month(as_date(date)),
+         quarter = quarter(as_date(date))) |> 
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |> 
+  rename(lat = LATDD,
+         lon = LONGDD,
+         length_class = Lengthcl,
+         sub_div = SD, 
+         ices_rect = Rect) |> 
+  drop_na(year)
+
+FLO2 <- FLO2 |> 
+  mutate(density = CPUEst / 0.45,
+         biomass_density = CPUEstBIOyear / 0.45,
+         month = month(as_date(date)),
+         quarter = quarter(as_date(date))) |> 
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |> 
+  rename(lat = LATDD,
+         lon = LONGDD,
+         length_class = Lengthcl,
+         sub_div = SD, 
+         ices_rect = Rect) |> 
+  drop_na(year)
+
+PLA2 <- PLA |> 
+  mutate(density = CPUEst / 0.45,
+         biomass_density = CPUEstBIOyear / 0.45,
+         month = month(as_date(date)),
+         quarter = quarter(as_date(date))) |> 
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |> 
+  rename(lat = LATDD,
+         lon = LONGDD,
+         length_class = Lengthcl,
+         sub_div = SD, 
+         ices_rect = Rect) |> 
+  drop_na(year)
+
+DAB <- DAB |> 
+  mutate(density = CPUEst / 0.45,
+         biomass_density = CPUEstBIOyear / 0.45,
+         month = month(as_date(date)),
+         quarter = quarter(as_date(date))) |> 
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |> 
+  rename(lat = LATDD,
+         lon = LONGDD,
+         length_class = Lengthcl,
+         sub_div = SD, 
+         ices_rect = Rect)
+
+TUR <- TUR |> 
+  mutate(density = CPUEst / 0.45,
+         biomass_density = CPUEstBIOyear / 0.45,
+         month = month(as_date(date)),
+         quarter = quarter(as_date(date))) |> 
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |> 
+  rename(lat = LATDD,
+         lon = LONGDD,
+         length_class = Lengthcl,
+         sub_div = SD, 
+         ices_rect = Rect)
+
+WHI <- WHI |> 
+  mutate(density = CPUEst / 0.45,
+         biomass_density = CPUEstBIOyear / 0.45,
+         month = month(as_date(date)),
+         quarter = quarter(as_date(date))) |> 
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |> 
+  rename(lat = LATDD,
+         lon = LONGDD,
+         length_class = Lengthcl,
+         sub_div = SD, 
+         ices_rect = Rect)
+```
+
+```{r trim and save data}
+COD2 |>
+  filter(SD %in% c(24, 25, 26, 27, 28)) |>
+  filter(year >= 1979) |>
+  summarise(cpue = mean(CPUEunBIOyear), .by = c(SD, year)) |>
+  ggplot(aes(year, cpue, color = SD)) +
+    geom_line()
+
+FLO2 |>
+  filter(SD %in% c(24, 25, 26, 27, 28)) |>
+  filter(year >= 1979) |>
+  summarise(cpue = mean(CPUEunBIOyear), .by = c(SD, year)) |>
+  ggplot(aes(year, cpue, color = SD)) +
+    geom_line()
+
+PLA |>
+  filter(SD %in% c(24, 25, 26, 27, 28)) |>
+  filter(year >= 1979) |>
+  summarise(cpue = mean(CPUEunBIOyear), .by = c(SD, year)) |>
+  ggplot(aes(year, cpue, color = SD)) +
+    geom_line()
+
+DAB |>
+  filter(SD %in% c(24, 25, 26, 27, 28)) |>
+  filter(year >= 1979) |>
+  summarise(cpue = mean(CPUEunBIOyear), .by = c(SD, year)) |>
+  ggplot(aes(year, cpue, color = SD)) +
+    geom_line()
+
+TUR |>
+  filter(SD %in% c(24, 25, 26, 27, 28)) |>
+  filter(year >= 1979) |>
+  summarise(cpue = mean(CPUEunBIOyear), .by = c(SD, year)) |>
+  ggplot(aes(year, cpue, color = SD)) +
+    geom_line()
+
+WHI |>
+  filter(SD %in% c(24, 25, 26, 27, 28)) |>
+  filter(year >= 1979) |>
+  summarise(cpue = mean(CPUEunBIOyear), .by = c(SD, year)) |>
+  ggplot(aes(year, cpue, color = SD)) +
+    geom_line()
+
+# Save data!
+write_csv(COD2, paste0(home, "/trawl-data-1978-2015/historical-trawl/output/cod_cpue_length_historical.csv"))
+write_csv(FLO2, paste0(home, "/trawl-data-1978-2015/historical-trawl/output/flounder_cpue_length_historical.csv"))
+write_csv(PLA, paste0(home, "/trawl-data-1978-2015/historical-trawl/output/plaice_cpue_length_historical.csv"))
+write_csv(DAB, paste0(home, "/trawl-data-1978-2015/historical-trawl/output/dab_cpue_length_historical.csv"))
+write_csv(TUR, paste0(home, "/trawl-data-1978-2015/historical-trawl/output/turbot_cpue_length_historical.csv"))
+```
+
+## Extra:
+
+```{r}
+# Plot comparison with previous script
+library(patchwork)
+
+d <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/cod_condition/master/data/for_analysis/catch_q_1_4.csv") |>
+  mutate(sub_div = as.factor(sub_div))
+
+# Summarise catches by haul
+COD3_sum <- COD2 |>
+  tidylog::summarise(biomass_density = sum(CPUEstBIOyear / 0.45), .by = IDX) |>
+  tidylog::left_join(COD2 |>
+                       dplyr::select(year, SD, IDX, Lengthcl, species, Rect,
+                                     date, LATDD, LONGDD, source) |>
+                       distinct(IDX, .keep_all = TRUE),
+            by = "IDX") |>
+  mutate(month = month(as_date(date)),
+         quarter = quarter(as_date(date))) |>
+  rename(lat = LATDD,
+         lon = LONGDD,
+         length_class = Lengthcl,
+         sub_div = SD,
+         ices_rect = Rect) |>
+  drop_na(year) |> 
+  filter(sub_div %in% c(24, 25, 26, 27, 28)) |>
+  filter(year >= 1979) |>
+  summarise(mean = mean(biomass_density), .by = c(sub_div, year, quarter)) |>
+  mutate(version = "new ale")
+
+d_sum <- d |>
+  filter(sub_div %in% c(24, 25, 26, 27, 28)) |>
+  filter(year >= 1979) |>
+  summarise(mean = mean(density), .by = c(sub_div, year, quarter)) |>
+  mutate(version = "cond")
+
+dd <- bind_rows(COD3_sum, d_sum)
+
+dd |>
+  filter(quarter %in% c(1, 4)) |>
+  filter(sub_div == 25) |>
+  ggplot(aes(year, mean, color = version)) +
+  geom_line() +
+  ggtitle("condition paper")
+```
+
