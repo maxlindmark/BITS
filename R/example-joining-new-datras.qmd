@@ -38,6 +38,8 @@ invisible(lapply(pkgs, library, character.only = T))
 
 # Set path
 home <- here::here()
+
+theme_set(theme_light())
 ```
 
 ## Read data
@@ -74,13 +76,13 @@ newsweep <- read.csv(paste0(home, "/data/trawl-data-historical/Datras/sweep_9116
 
 # Create ID column
 bits_ca <- bits_ca |>
-  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
+  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = ":"))
 
 bits_hl <- bits_hl |>
-  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
+  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = ":"))
 
 bits_hh <- bits_hh |>
-  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
+  mutate(haul_id = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = ":"))
 ```
 
 #### Clean DATRAS EXCHANGE data
@@ -142,11 +144,11 @@ bits_hl <- bits_hl |>
   filter(haul_id %in% bits_hh$haul_id)
 
 bits_hh_merge <- bits_hh |>
-  mutate(date = paste(Year, Month, Day, sep = "-")) |> 
+  mutate(date = paste(Year, Month, Day, sep = "-")) |>
   dplyr::select(
     sub_div, ices_rect, HaulVal, StdSpecRecCode, BySpecRecCode, Fishing.line, Month,
     DataType, HaulDur, GroundSpeed, haul_id, ShootLat, ShootLong, Day, Month, date
-    )
+  )
 
 bits_hl <- left_join(bits_hl, bits_hh_merge, by = c("haul_id"))
 bits_ca <- left_join(bits_ca, bits_hh_merge, by = c("haul_id"))
@@ -191,6 +193,8 @@ hlcod0 <- hlcod0 |> filter(!SpecVal == "0")
 # Add species again after merge
 hlcod0$Species <- "Gadus morhua"
 
+
+
 # Flounder: Add 0s, remove them if StdSpecRecCode !=1 and then remove lines with SpecVal = 0
 hlfle0 <- full_join(hlfle, bits_hh[, comcol], by = comcol)
 
@@ -214,16 +218,12 @@ Then I will sum for the same haul the CPUE of the same length classes if they we
 # Cod
 hlcod0 <- hlcod0 |>
   mutate(CPUEun = ifelse(SpecVal == "1" & DataType == "C", HLNoAtLngt,
-                         
-                         ifelse(SpecVal == "1" & DataType == "R", HLNoAtLngt / (HaulDur / 60),
-                                
-                                ifelse(SpecVal == "1" & DataType == "S", (HLNoAtLngt * SubFactor) / (HaulDur / 60),
-                                       
-                                       ifelse(SpecVal == "zeroCatch", 0, NA)
-                                       )
-                                )
-                         )
-         )
+    ifelse(SpecVal == "1" & DataType == "R", HLNoAtLngt / (HaulDur / 60),
+      ifelse(SpecVal == "1" & DataType == "S", (HLNoAtLngt * SubFactor) / (HaulDur / 60),
+        ifelse(SpecVal == "zeroCatch", 0, NA)
+      )
+    )
+  ))
 
 # Some rows have multiple rows per combination of length class and haul id (i suppose often because it's split by sex), so we need to sum it up
 hlcod0 |>
@@ -248,20 +248,23 @@ hlcodL <- hlcod0 |>
   distinct(id3, .keep_all = TRUE) |>
   dplyr::select(-id3) # Clean up a bit
 
+# Check proportion 0 hauls over time
+hlcod0 |> 
+  summarise(CPUEun = sum(CPUEun), .by = c(Year, haul_id)) |> 
+  mutate(zc = ifelse(CPUEun > 0, "0", "1")) |> 
+  summarise(prop_z = n(), .by = c(Year, zc)) |> 
+  pivot_wider(values_from = "prop_z", names_from = "zc") |> 
+  mutate(prop = (`0` / (`0` + `1`)) * 100)
+
 # Flounder
 hlfle0 <- hlfle0 |>
   mutate(CPUEun = ifelse(SpecVal == "1" & DataType == "C", HLNoAtLngt,
-                         
-                         ifelse(SpecVal == "1" & DataType == "R", HLNoAtLngt / (HaulDur / 60),
-                                
-                                ifelse(SpecVal == "1" & DataType == "S", (HLNoAtLngt * SubFactor) / (HaulDur / 60),
-                                       
-                                       ifelse(SpecVal == "zeroCatch", 0, NA)
-                                       )
-
-                                )
-                         )
-         )
+    ifelse(SpecVal == "1" & DataType == "R", HLNoAtLngt / (HaulDur / 60),
+      ifelse(SpecVal == "1" & DataType == "S", (HLNoAtLngt * SubFactor) / (HaulDur / 60),
+        ifelse(SpecVal == "zeroCatch", 0, NA)
+      )
+    )
+  ))
 
 # Some rows have multiple rows per combination of length class and haul id (i suppose often because it's split by sex), so we need to sum it up
 hlfle0 |>
@@ -310,9 +313,9 @@ bits_ca_cod <- bits_ca_cod |>
   filter(IndWgt > 0 & LngtClass > 0) |> # Filter positive length and weight
   mutate(weight_kg = IndWgt / 1000) |>
   mutate(length_cm = ifelse(LngtCode == ".",
-                            LngtClass / 10,
-                            LngtClass
-                            )) # Standardize length ((https://vocab.ices.dk/?ref=18))
+    LngtClass / 10,
+    LngtClass
+  )) # Standardize length ((https://vocab.ices.dk/?ref=18))
 
 # Plot
 # ggplot(bits_ca_cod, aes(IndWgt, length_cm)) +
@@ -320,17 +323,17 @@ bits_ca_cod <- bits_ca_cod |>
 #   facet_wrap(~Year)
 
 # Now extract the coefficients for each year (not bothering with outliers at the moment)
-lwCOD <- bits_ca_cod %>% 
-  split(.$Year) |> 
+lwCOD <- bits_ca_cod %>%
+  split(.$Year) |>
   purrr::map(~ lm(log(IndWgt) ~ log(length_cm), data = .x)) |>
-  purrr::map_df(broom::tidy, .id = 'Year') |>
-  dplyr::select(Year, term, estimate) |> 
-  pivot_wider(names_from = term, values_from = estimate) |> 
-  mutate(aL = exp(`(Intercept)`)) |> 
-  dplyr::select(-`(Intercept)`) |> 
-  rename(b = `log(length_cm)`) |> 
+  purrr::map_df(broom::tidy, .id = "Year") |>
+  dplyr::select(Year, term, estimate) |>
+  pivot_wider(names_from = term, values_from = estimate) |>
+  mutate(aL = exp(`(Intercept)`)) |>
+  dplyr::select(-`(Intercept)`) |>
+  rename(b = `log(length_cm)`) |>
   filter(b > 2 & b < 4) |>
-  filter(aL > 0.00001 & aL < 0.1) |> 
+  filter(aL > 0.00001 & aL < 0.1) |>
   mutate(Year = as.numeric(Year))
 
 # Flounder
@@ -348,9 +351,9 @@ bits_ca_fle <- bits_ca_fle |>
   filter(IndWgt > 0 & LngtClass > 0) |> # Filter positive length and weight
   mutate(weight_kg = IndWgt / 1000) |>
   mutate(length_cm = ifelse(LngtCode == ".",
-                            LngtClass / 10,
-                            LngtClass
-                            )) |> # Standardize length ((https://vocab.ices.dk/?ref=18))
+    LngtClass / 10,
+    LngtClass
+  )) |> # Standardize length ((https://vocab.ices.dk/?ref=18))
   mutate(keep = ifelse(LngtCode == "." & Year == 2008, "N", "Y")) |>
   filter(keep == "Y") |>
   filter(length_cm < 70)
@@ -361,17 +364,17 @@ bits_ca_fle <- bits_ca_fle |>
 #   facet_wrap(~Year)
 
 # Now extract the coefficients for each year (not bothering with outliers at the moment)
-lwFLE <- bits_ca_fle %>% 
-  split(.$Year) |> 
+lwFLE <- bits_ca_fle %>%
+  split(.$Year) |>
   purrr::map(~ lm(log(IndWgt) ~ log(length_cm), data = .x)) |>
-  purrr::map_df(broom::tidy, .id = 'Year') |>
-  dplyr::select(Year, term, estimate) |> 
-  pivot_wider(names_from = term, values_from = estimate) |> 
-  mutate(aL = exp(`(Intercept)`)) |> 
-  dplyr::select(-`(Intercept)`) |> 
-  rename(b = `log(length_cm)`) |> 
+  purrr::map_df(broom::tidy, .id = "Year") |>
+  dplyr::select(Year, term, estimate) |>
+  pivot_wider(names_from = term, values_from = estimate) |>
+  mutate(aL = exp(`(Intercept)`)) |>
+  dplyr::select(-`(Intercept)`) |>
+  rename(b = `log(length_cm)`) |>
   filter(b > 2 & b < 4) |>
-  filter(aL > 0.00001 & aL < 0.1) |> 
+  filter(aL > 0.00001 & aL < 0.1) |>
   mutate(Year = as.numeric(Year))
 
 # Join the annual L-W relationships to the respective catch data to calculate CPUE in biomass not abundance
@@ -387,14 +390,18 @@ hlfleL <- left_join(hlfleL, lwFLE, by = "Year")
 # Cod
 # Standardize length to cm
 hlcodL <- hlcodL |>
-  mutate(length_cm = ifelse(LngtCode == ".", 
-                            LngtClass / 10,
-                            LngtClass
-                            )) # Standardize length ((https://vocab.ices.dk/?ref=18))
+  mutate(length_cm = ifelse(LngtCode == ".",
+    LngtClass / 10,
+    LngtClass
+  )) # Standardize length ((https://vocab.ices.dk/?ref=18))
 
 # Now check if all rows where length is NA are the ones with zero catch!
-hlcodL |> filter(CPUEun == 0) |> distinct(length_cm)
-hlcodL |> filter(is.na(length_cm)) |> distinct(CPUEun)
+hlcodL |>
+  filter(CPUEun == 0) |>
+  distinct(length_cm)
+hlcodL |>
+  filter(is.na(length_cm)) |>
+  distinct(CPUEun)
 
 # In other words, a zero catch is when the catch is zero and length_cm is NA
 # In order to not get any NA CPUEs in unit biomass because length is NA (I want them instead to be 0, as the numbers-CPUE is), I will replace length_cm == NA with length_cm == 0 before calculating biomass CPUE
@@ -415,9 +422,9 @@ hlcodL <- hlcodL |>
 # First standardize length to cm and then check how zero-catches are implemented at this stage
 hlfleL <- hlfleL |>
   mutate(length_cm = ifelse(LngtCode %in% c(".", "0"),
-                            LngtClass / 10,
-                            LngtClass
-                            )) # Standardize length (https://vocab.ices.dk/?ref=18)
+    LngtClass / 10,
+    LngtClass
+  )) # Standardize length (https://vocab.ices.dk/?ref=18)
 
 # Now check if all rows where length is NA are the ones with zero catch!
 # hlfleL |>
@@ -495,8 +502,9 @@ hlcodL <- hlcodL |>
     Size.final..m = Horizontal.opening..m. + (Swep.one.side..after.formula...meter * 2),
     Swept.area = (Size.final..m * 3 * 1860) / 1000000,
     RSA_x = 0.45388309675081 / Swept.area
-  ) |> 
-  filter(GroundSpeed > 0.1)
+  ) |>
+  filter(GroundSpeed > 1) |> 
+  filter(SweepLngt > 10)
 
 hlfleL <- hlfleL |>
   mutate(
@@ -506,8 +514,9 @@ hlfleL <- hlfleL |>
     Size.final..m = Horizontal.opening..m. + (Swep.one.side..after.formula...meter * 2),
     Swept.area = (Size.final..m * 3 * 1860) / 1000000,
     RSA_x = 0.45388309675081 / Swept.area
-  ) |> 
-  filter(GroundSpeed > 0.1)
+  ) |>
+  filter(GroundSpeed > 1) |> 
+  filter(SweepLngt > 10)
 
 # Standardize!
 hlcodL <- hlcodL |>
@@ -546,29 +555,39 @@ hlfleL <- hlfleL |>
 # Rename columns and select specific columns from the cod data
 # Cod
 datcod <- hlcodL |>
-  dplyr::select(density, biomass_density, Year, Species, ShootLat, ShootLong, Quarter, 
-                Month, Day, date, haul_id, ices_rect, sub_div, length_cm2) |>
-  janitor::clean_names() |> 
+  dplyr::select(
+    density, biomass_density, Year, Species, ShootLat, ShootLong, Quarter,
+    Month, Day, date, haul_id, ices_rect, sub_div, length_cm2,
+    # FIXME
+    CPUEun # For comparing with Alessandro
+  ) |>
+  janitor::clean_names() |>
   rename(
     lat = shoot_lat,
     lon = shoot_long,
     length_class = length_cm2
-  ) |> 
-  mutate(source = "DATRAS",
-         length_class = ifelse(length_class == 0, NA, length_class))
+  ) |>
+  mutate(
+    source = "DATRAS",
+    length_class = ifelse(length_class == 0, NA, length_class)
+  )
 
 # Flounder
 datfle <- hlfleL |>
-  dplyr::select(density, biomass_density, Year, Species, ShootLat, ShootLong, Quarter,
-                Month, Day, date, haul_id, ices_rect, sub_div, length_cm2) |>
-  janitor::clean_names() |> 
+  dplyr::select(
+    density, biomass_density, Year, Species, ShootLat, ShootLong, Quarter,
+    Month, Day, date, haul_id, ices_rect, sub_div, length_cm2
+  ) |>
+  janitor::clean_names() |>
   rename(
     lat = shoot_lat,
     lon = shoot_long,
     length_class = length_cm2
-  ) |> 
-  mutate(source = "DATRAS",
-         length_class = ifelse(length_class == 0, NA, length_class))
+  ) |>
+  mutate(
+    source = "DATRAS",
+    length_class = ifelse(length_class == 0, NA, length_class)
+  )
 
 write_csv(datcod, paste0(home, "/output/cod_cpue_length.csv"))
 write_csv(datfle, paste0(home, "/output/cod_cpue_length.csv"))
@@ -577,36 +596,116 @@ write_csv(datfle, paste0(home, "/output/cod_cpue_length.csv"))
 ```{r}
 #| message: false
 
-condition <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/cod_condition/master/data/for_analysis/catch_q_1_4.csv") |>
-  mutate(sub_div = as.factor(sub_div)) |> 
-  filter(year >= 1993) |> 
-  filter(sub_div %in% c(24, 25, 26, 27, 28)) |> 
-  summarise(mean = median(density), .by = c(sub_div, year, quarter)) |> 
-  mutate(version = "condition")
+# condition <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/cod_condition/master/data/for_analysis/catch_q_1_4.csv") |>
+#   mutate(sub_div = as.factor(sub_div)) |>
+#   filter(year >= 1993) |>
+#   filter(sub_div %in% c(24, 25, 26, 27, 28)) |>
+#   summarise(mean = median(density), .by = c(sub_div, year, quarter)) |>
+#   mutate(version = "condition")
 
-historical <- read_csv(paste0(home, "/output/cod_cpue_length_historical.csv")) |> 
-  filter(year >= 1993) |> 
-  filter(source == "datras") |> 
-  filter(sub_div %in% c(24, 25, 26, 27, 28)) |>
-  summarise(sum = sum(biomass_density), .by = c(haul_id, sub_div, year, quarter)) |> 
-  summarise(mean = median(sum), .by = c(sub_div, year, quarter)) |> 
-  mutate(version = "historical")
+historical <- read_csv(paste0(home, "/output/cod_cpue_length_historical.csv")) |>
+  #filter(year >= 1993 & source == "datras" & quarter %in% c(1, 4)) |>
+  filter(year >= 1993 & quarter %in% c(1, 4)) |>
+  filter(sub_div %in% c(24, 25, 26, 28)) |>
+  separate(haul_id, into = c("year2", "q2", "country"), sep = ":", remove = FALSE) |>
+  # I can't do the below in Ale's data because the source column isn't there
+  mutate(country = ifelse(source == "sweden", "SE", country)) |> 
+  summarise(sum = sum(CPUEun),
+            sum_st = sum(density),
+            sumb_st = sum(biomass_density),
+            .by = c(haul_id, sub_div, year, quarter, country)) |>
+  summarise(avg = mean(sum),
+            avg_st = mean(sum_st),
+            avgb_st = mean(sumb_st),
+            .by = c(sub_div, year, quarter, country)) |>
+  mutate(version = "historical") |> 
+  filter()
 
-new <- datcod |> 
-  filter(sub_div %in% c(24, 25, 26, 27, 28)) |> 
-  summarise(sum = sum(biomass_density), .by = c(haul_id, sub_div, year, quarter)) |> 
-  summarise(mean = median(sum), .by = c(sub_div, year, quarter)) |> 
-  mutate(version = "new")
+new <- datcod |>
+  filter(sub_div %in% c(24, 25, 26, 28)) |>
+  separate(haul_id, into = c("year2", "q2", "country"), sep = ":", remove = FALSE) |>
+  summarise(sum = sum(cpu_eun),
+            sumb_st = sum(biomass_density),
+            sum_st = sum(density),
+            .by = c(haul_id, sub_div, year, quarter, country)) |>
+  summarise(avg = mean(sum),
+            avg_st = mean(sum_st),
+            avgb_st = mean(sumb_st),
+            .by = c(sub_div, year, quarter, country)) |>
+  mutate(version = "new",
+         country = ifelse(country == "DK", "DEN", country),
+         country = ifelse(country == "PL", "POL", country),
+         country = ifelse(country == "RU", "RUS", country),
+         country = ifelse(country == "DE", "GFR", country),
+         country = ifelse(country == "EE", "EST", country),
+         country = ifelse(country == "LT", "LAT", country),
+         country = ifelse(country == "LV", "LTU", country))
 
-dd <- bind_rows(historical, new, condition)
+orio <- read.csv("/Users/maxlindmark/Dropbox/Max work/R/gear-standardization-ale/datras_st_ale.csv") |> 
+  filter(SD %in% c(24, 25, 26, 28)) |>
+  mutate(quarter = quarter(date)) |> 
+  filter(quarter %in% c(1, 4) & year > 1993) |> 
+  separate(IDX, into = c("year2", "q2", "country"), sep = ":", remove = FALSE) |> 
+  summarise(sum = sum(CPUEun),
+            sumb_st = sum((CPUEstBIOyear/0.45) / 1000),
+            sum_st = sum(CPUEst/0.45), .by = c(IDX, SD, year, quarter, country)) |>
+  summarise(avg = mean(sum),
+            avg_st = mean(sum_st),
+            avgb_st = mean(sumb_st),
+            .by = c(SD, year, quarter, country)) |>
+  mutate(version = "orio") |> 
+  mutate(sub_div = as.character(SD)) 
+  
+dd <- bind_rows(historical, new, orio)
+
+overlap <- intersect(unique(historical$year),
+                     unique(new$year))
 
 dd |>
-  filter(year > 2010) |> 
-  ggplot(aes(year, mean, color = version)) +
-  geom_point() +
-  geom_line() + 
-  ggh4x::facet_grid2(quarter~sub_div, independent = "y", scales = "free")
+  # If I remove Sweden from the new source the match is very good!
+  filter(!country == "SE") |> 
+  summarise(avg = mean(avg),
+            avg_st = mean(avg_st), .by = c(sub_div, year, quarter, version)) |>
+  ggplot(aes(year, avg, color = version, linetype = version, shape = version)) +
+  geom_point(size = 2, alpha = 0.5) +
+  geom_line(alpha = 0.5, linewidth = 1) +
+  ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
 
-# The differences between the series can largely be explain by 1) using different standardisation factors and 2) length-weight parameters, because I see smaller differences when I use the raw, unstandardised count cpue (not included currently in the data files)
+dd |>
+  # If I don't remove Sweden, there's a match between historical and new, but not Orio. This is because "SE" is not in Orio, because I make the country column from the haul ID, and the haul ID from the Swedish data does not have country. 
+  summarise(avg = mean(avg),
+            avg_st = mean(avg_st), .by = c(sub_div, year, quarter, version)) |>
+  ggplot(aes(year, avg, color = version, linetype = version, shape = version)) +
+  geom_point(size = 2, alpha = 0.5) +
+  geom_line(alpha = 0.5, linewidth = 1) +
+  ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
+
+# Compare non swedish data with Orio and the standardized density data
+dd |>
+  filter(!country == "SE") |> 
+  filter(year %in% c(overlap)) |> 
+  summarise(avg = mean(avg),
+            avg_st = mean(avg_st), .by = c(sub_div, year, quarter, version)) |>
+  ggplot(aes(year, avg_st, color = version, linetype = version, shape = version)) +
+  geom_point(size = 2, alpha = 0.5) +
+  geom_line(alpha = 0.5, linewidth = 1) +
+  ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
+
+# Compare non swedish data with Orio and the standardized biomass density data
+dd |>
+  filter(!country == "SE") |> 
+  filter(year %in% c(overlap)) |> 
+  summarise(avgb_st = mean(avgb_st), .by = c(sub_div, year, quarter, version)) |>
+  ggplot(aes(year, avgb_st, color = version, linetype = version, shape = version)) +
+  geom_point(size = 2, alpha = 0.5) +
+  geom_line(alpha = 0.5, linewidth = 1) +
+  ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
+
+# dd |>
+#   filter(quarter == 1) |> 
+#   ggplot(aes(year, avg, color = version, linetype = country)) +
+#   geom_line(alpha = 0.75, linewidth = 1) +
+#   ggh4x::facet_grid2(country ~ sub_div, independent = "y", scales = "free")
+
 ```
 
