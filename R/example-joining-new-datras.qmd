@@ -304,7 +304,7 @@ bits_ca_cod <- bits_ca |>
   mutate(ID = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
 
 # Now I need to copy rows with NoAtLngt > 1 so that 1 row = 1 ind
-bits_ca_cod2 <- bits_ca_cod %>% map_df(., rep, .$CANoAtLngt)
+bits_ca_cod <- bits_ca_cod %>% map_df(., rep, .$CANoAtLngt)
 
 # Standardize length and drop NA weights (need that for condition)
 bits_ca_cod <- bits_ca_cod |>
