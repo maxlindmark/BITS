@@ -26,7 +26,7 @@ In this script, I load exchange data from datras and calculate catch of cod and 
 
 # Load libraries, install if needed
 pkgs <- c(
-  "tidyverse", "tidylog", "RCurl", "devtools",
+  "tidyverse", "tidylog", "RCurl", "devtools", "patchwork",
   "janitor", "icesDatras", "mapdata", "raster", "mapplots"
 )
 
@@ -480,17 +480,17 @@ To get unit: kg of fish caught by trawling for 1 h a standard bottom swept area 
 hlcodL <- hlcodL |>
   mutate(
     GroundSpeed = ifelse(GroundSpeed == -9, NA, GroundSpeed),
+    GroundSpeed = ifelse(is.na(GroundSpeed), median(GroundSpeed, na.rm = TRUE), GroundSpeed),
     SweepLngt = ifelse(SweepLngt == -9, NA, SweepLngt),
-    GroundSpeed = ifelse(is.na(GroundSpeed), mean(GroundSpeed, na.rm = TRUE), GroundSpeed),
-    SweepLngt = ifelse(is.na(SweepLngt), mean(SweepLngt, na.rm = TRUE), GroundSpeed)
+    SweepLngt = ifelse(is.na(SweepLngt), median(SweepLngt, na.rm = TRUE), SweepLngt)
   )
 
 hlfleL <- hlfleL |>
   mutate(
     GroundSpeed = ifelse(GroundSpeed == -9, NA, GroundSpeed),
+    GroundSpeed = ifelse(is.na(GroundSpeed), median(GroundSpeed, na.rm = TRUE), GroundSpeed),
     SweepLngt = ifelse(SweepLngt == -9, NA, SweepLngt),
-    GroundSpeed = ifelse(is.na(GroundSpeed), mean(GroundSpeed, na.rm = TRUE), GroundSpeed),
-    SweepLngt = ifelse(is.na(SweepLngt), mean(SweepLngt, na.rm = TRUE), GroundSpeed)
+    SweepLngt = ifelse(is.na(SweepLngt), median(SweepLngt, na.rm = TRUE), GroundSpeed)
   )
 
 # Now calculate correction factors
@@ -503,8 +503,8 @@ hlcodL <- hlcodL |>
     Swept.area = (Size.final..m * 3 * 1860) / 1000000,
     RSA_x = 0.45388309675081 / Swept.area
   ) |>
-  filter(GroundSpeed > 1) |> 
-  filter(SweepLngt > 10)
+  filter(RS_x >= 0.59 & RS_x <= 1.93)
+
 
 hlfleL <- hlfleL |>
   mutate(
@@ -515,8 +515,7 @@ hlfleL <- hlfleL |>
     Swept.area = (Size.final..m * 3 * 1860) / 1000000,
     RSA_x = 0.45388309675081 / Swept.area
   ) |>
-  filter(GroundSpeed > 1) |> 
-  filter(SweepLngt > 10)
+  filter(RS_x >= 0.59 & RS_x <= 1.93)
 
 # Standardize!
 hlcodL <- hlcodL |>
@@ -618,8 +617,7 @@ historical <- read_csv(paste0(home, "/output/cod_cpue_length_historical.csv")) |
             avg_st = mean(sum_st),
             avgb_st = mean(sumb_st),
             .by = c(sub_div, year, quarter, country)) |>
-  mutate(version = "historical") |> 
-  filter()
+  mutate(version = "historical")
 
 new <- datcod |>
   filter(sub_div %in% c(24, 25, 26, 28)) |>
@@ -641,6 +639,8 @@ new <- datcod |>
          country = ifelse(country == "LT", "LAT", country),
          country = ifelse(country == "LV", "LTU", country))
 
+# This comes from the repo "gear standardization ale"
+# Note I have biomass density in grams in that script (forgot to change)
 orio <- read.csv("/Users/maxlindmark/Dropbox/Max work/R/gear-standardization-ale/datras_st_ale.csv") |> 
   filter(SD %in% c(24, 25, 26, 28)) |>
   mutate(quarter = quarter(date)) |> 
@@ -661,35 +661,44 @@ dd <- bind_rows(historical, new, orio)
 overlap <- intersect(unique(historical$year),
                      unique(new$year))
 
+# How do the series compare (Sweden remove since it's not in Orio because I filtered source = DATRAS when saving that)
 dd |>
-  # If I remove Sweden from the new source the match is very good!
   filter(!country == "SE") |> 
-  summarise(avg = mean(avg),
-            avg_st = mean(avg_st), .by = c(sub_div, year, quarter, version)) |>
+  summarise(avg = mean(avg), .by = c(sub_div, year, quarter, version)) |>
   ggplot(aes(year, avg, color = version, linetype = version, shape = version)) +
-  geom_point(size = 2, alpha = 0.5) +
-  geom_line(alpha = 0.5, linewidth = 1) +
+  geom_point(size = 2, alpha = 0.3) +
+  geom_line(alpha = 0.3, linewidth = 1) +
   ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
 
 dd |>
-  # If I don't remove Sweden, there's a match between historical and new, but not Orio. This is because "SE" is not in Orio, because I make the country column from the haul ID, and the haul ID from the Swedish data does not have country. 
-  summarise(avg = mean(avg),
-            avg_st = mean(avg_st), .by = c(sub_div, year, quarter, version)) |>
-  ggplot(aes(year, avg, color = version, linetype = version, shape = version)) +
-  geom_point(size = 2, alpha = 0.5) +
-  geom_line(alpha = 0.5, linewidth = 1) +
+  filter(!country == "SE") |> 
+  summarise(avg_st = mean(avg_st), .by = c(sub_div, year, quarter, version)) |>
+  ggplot(aes(year, avg_st, color = version, linetype = version, shape = version)) +
+  geom_point(size = 2, alpha = 0.3) +
+  geom_line(alpha = 0.3, linewidth = 1) +
   ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
 
-# Compare non swedish data with Orio and the standardized density data
+# Compare non swedish data with Orio and the standardized density data by country
+dd |>
+  filter(!country == "SE" & quarter == 1) |> 
+  filter(year %in% c(overlap)) |> 
+  summarise(avg_st = mean(avg_st), .by = c(sub_div, year, country, version)) |>
+  ggplot(aes(year, avg_st, color = version, linetype = version, shape = version)) +
+  geom_point(size = 2, alpha = 0.3) +
+  geom_line(alpha = 0.3, linewidth = 1) +
+  ggh4x::facet_grid2(sub_div ~ country, independent = "y", scales = "free") +
+  ggtitle("standardised")
+
+# Some differences between standardised and non-standardized data
 dd |>
   filter(!country == "SE") |> 
   filter(year %in% c(overlap)) |> 
-  summarise(avg = mean(avg),
-            avg_st = mean(avg_st), .by = c(sub_div, year, quarter, version)) |>
-  ggplot(aes(year, avg_st, color = version, linetype = version, shape = version)) +
-  geom_point(size = 2, alpha = 0.5) +
-  geom_line(alpha = 0.5, linewidth = 1) +
-  ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
+  summarise(avg = mean(avg), .by = c(sub_div, year, country, version)) |>
+  ggplot(aes(year, avg, color = version, linetype = version, shape = version)) +
+  geom_point(size = 3, alpha = 0.3) +
+  geom_line(alpha = 0.3, linewidth = 1) +
+  ggh4x::facet_grid2(sub_div ~ country, independent = "y", scales = "free") +
+  ggtitle("un-standardised")
 
 # Compare non swedish data with Orio and the standardized biomass density data
 dd |>
@@ -699,13 +708,13 @@ dd |>
   ggplot(aes(year, avgb_st, color = version, linetype = version, shape = version)) +
   geom_point(size = 2, alpha = 0.5) +
   geom_line(alpha = 0.5, linewidth = 1) +
-  ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
+  ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free") +
+  ggtitle("standardised")
 
-# dd |>
-#   filter(quarter == 1) |> 
-#   ggplot(aes(year, avg, color = version, linetype = country)) +
-#   geom_line(alpha = 0.75, linewidth = 1) +
-#   ggh4x::facet_grid2(country ~ sub_div, independent = "y", scales = "free")
-
+dd |>
+  filter(quarter == 1) |>
+  ggplot(aes(year, avg, color = version, linetype = country)) +
+  geom_line(alpha = 0.75, linewidth = 1) +
+  ggh4x::facet_grid2(country ~ sub_div, independent = "y", scales = "free")
 ```
 

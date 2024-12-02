@@ -2282,12 +2282,6 @@ COD$CPUEst <- COD$CPUEun * COD$RSA * COD$RS
 # COD$CPUEstBIOuni <- COD$CPUEunBIOuni*COD$RSA*COD$RS
 COD$CPUEstBIOyear <- COD$CPUEunBIOyear * COD$RSA * COD$RS
 
-# summary(COD)
-hist(COD$RSA)
-hist(COD$RS)
-hist(COD$speed)
-summary(COD$speed)
-
 names(COD)
 names(COD) <- c(
   "year", "vessel", "trawl_time", "SD", "IDX", "Lengthcl", "CPUEun", "species",
