@@ -636,8 +636,8 @@ new <- datcod |>
          country = ifelse(country == "RU", "RUS", country),
          country = ifelse(country == "DE", "GFR", country),
          country = ifelse(country == "EE", "EST", country),
-         country = ifelse(country == "LT", "LAT", country),
-         country = ifelse(country == "LV", "LTU", country))
+         country = ifelse(country == "LT", "LTU", country),
+         country = ifelse(country == "LV", "LAT", country))
 
 # This comes from the repo "gear standardization ale"
 # Note I have biomass density in grams in that script (forgot to change)
@@ -678,6 +678,25 @@ dd |>
   geom_line(alpha = 0.3, linewidth = 1) +
   ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
 
+dd |>
+  filter(!country == "SE") |> 
+  summarise(avgb_st = mean(avgb_st), .by = c(sub_div, year, quarter, version)) |>
+  ggplot(aes(year, avgb_st, color = version, linetype = version, shape = version)) +
+  geom_point(size = 2, alpha = 0.3) +
+  geom_line(alpha = 0.3, linewidth = 1) +
+  ggh4x::facet_grid2(sub_div ~ quarter, independent = "y", scales = "free")
+
+# Compare non swedish data with Orio and the un-standardized density data by country
+dd |>
+  filter(!country == "SE") |> 
+  filter(year %in% c(overlap)) |> 
+  summarise(avg = mean(avg), .by = c(sub_div, year, country, version)) |>
+  ggplot(aes(year, avg, color = version, linetype = version, shape = version)) +
+  geom_point(size = 3, alpha = 0.3) +
+  geom_line(alpha = 0.3, linewidth = 1) +
+  ggh4x::facet_grid2(sub_div ~ country, independent = "y", scales = "free") +
+  ggtitle("un-standardised")
+
 # Compare non swedish data with Orio and the standardized density data by country
 dd |>
   filter(!country == "SE" & quarter == 1) |> 
@@ -688,17 +707,6 @@ dd |>
   geom_line(alpha = 0.3, linewidth = 1) +
   ggh4x::facet_grid2(sub_div ~ country, independent = "y", scales = "free") +
   ggtitle("standardised")
-
-# Some differences between standardised and non-standardized data
-dd |>
-  filter(!country == "SE") |> 
-  filter(year %in% c(overlap)) |> 
-  summarise(avg = mean(avg), .by = c(sub_div, year, country, version)) |>
-  ggplot(aes(year, avg, color = version, linetype = version, shape = version)) +
-  geom_point(size = 3, alpha = 0.3) +
-  geom_line(alpha = 0.3, linewidth = 1) +
-  ggh4x::facet_grid2(sub_div ~ country, independent = "y", scales = "free") +
-  ggtitle("un-standardised")
 
 # Compare non swedish data with Orio and the standardized biomass density data
 dd |>
