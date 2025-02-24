@@ -1,6 +1,7 @@
 library(taxize)
 library(tidyr)
 library(dplyr)
+library(readr)
 
 tax <- tibble(
   latin_name = c(
@@ -8,7 +9,7 @@ tax <- tibble(
     "Platichthys flesus", "Platichthys solemdali",
     "Limanda limanda",
     "Merlangius merlangus",
-    "Pleuronectes platessus",
+    "Pleuronectes platessa",
     "Scophthalmus maximus", "Psetta maxima"
   ),
   common_name = c(
