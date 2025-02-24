@@ -30,6 +30,7 @@ This first chunk reads in Swedish historical data and data from Fiskdata2 (inter
 ```{r}
 #| message: false
 
+library(tidyr)
 library(dplyr)
 library(purrr)
 library(ggplot2)
@@ -667,7 +668,7 @@ DataStuart$Rect <- survey_idx[match(DataStuart$IDX, survey_idx$IDX), "Rect"]
 # nrow(DataStuart)
 # DataStuart <- DataStuart[DataStuart$SD!="IIIa",]
 
-# summary(DataStuart)
+summary(DataStuart)
 str(DataStuart)
 
 t <- DataStuart |> filter(CPUEst == 0)
@@ -685,6 +686,12 @@ DataStuart |>
   distinct(IDX, .keep_all = TRUE) |>
   ggplot(aes(LONGDD, LATDD)) +
   geom_point()
+
+DataStuart_ids <- unique(DataStuart$IDX)
+
+DataStuart <- DataStuart |>
+  separate(IDX, sep = ":", into = c("IDX_SSB", "date2")) |>
+  dplyr::select(-date2)
 ```
 
 ## DATRAS
@@ -2677,7 +2684,7 @@ FLO2 <- FLO2 |>
   ) |>
   drop_na(year)
 
-PLA2 <- PLA |>
+PLA <- PLA |>
   mutate(
     density = CPUEst / 0.45,
     biomass_density = CPUEstBIOyear / 0.45,
