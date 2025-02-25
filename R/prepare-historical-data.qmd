@@ -364,15 +364,15 @@ whitingT <- merge(index, whiting, by = "idx", all.y = T)
 
 
 ##### select just OTB
+# ML note: this way of logical filtering also includes NA!
+codT <- codT[codT$REDSKENG == "OTB Otter trawl bottom", ] |> drop_na(REDSKENG)
+flounderT <- flounderT[flounderT$REDSKENG == "OTB Otter trawl bottom", ] |> drop_na(REDSKENG)
+plaiceT <- plaiceT[plaiceT$REDSKENG == "OTB Otter trawl bottom", ] |> drop_na(REDSKENG)
+dabT <- dabT[dabT$REDSKENG == "OTB Otter trawl bottom", ] |> drop_na(REDSKENG)
+turbotT <- turbotT[turbotT$REDSKENG == "OTB Otter trawl bottom", ] |> drop_na(REDSKENG)
+whitingT <- whitingT[whitingT$REDSKENG == "OTB Otter trawl bottom", ] |> drop_na(REDSKENG)
 
-codT <- codT[codT$REDSKENG == "OTB Otter trawl bottom", ]
-flounderT <- flounderT[flounderT$REDSKENG == "OTB Otter trawl bottom", ]
-plaiceT <- plaiceT[plaiceT$REDSKENG == "OTB Otter trawl bottom", ]
-dabT <- dabT[dabT$REDSKENG == "OTB Otter trawl bottom", ]
-turbotT <- turbotT[turbotT$REDSKENG == "OTB Otter trawl bottom", ]
-whitingT <- whitingT[whitingT$REDSKENG == "OTB Otter trawl bottom", ]
-
-index <- index[index$REDSKENG == "OTB Otter trawl bottom", ]
+index <- index[index$REDSKENG == "OTB Otter trawl bottom", ] |> drop_na(REDSKENG)
 
 ##### remove invalid and calibration hauls
 
@@ -690,15 +690,17 @@ DataStuart |>
 DataStuart_ids <- unique(DataStuart$IDX)
 
 DataStuart <- DataStuart |>
-  separate(IDX, sep = ":", into = c("IDX_SSB", "date2")) |>
+  separate(IDX, sep = ":", into = c("IDX_SSB", "date2"), remove = FALSE) |>
   dplyr::select(-date2)
 
-DataStuart |> 
-  filter(year >= 1979) |> 
-  summarise(mean = mean(CPUEst), .by = c(year, species)) |> 
-  ggplot(aes(year, mean, color = species, fill = species)) +
-  facet_wrap(~species, scales = "free") +
-  geom_col()
+# unique(is.na(DataStuart$IDX))
+# 
+# t <- DataStuart |> filter(is.na(IDX))
+# 
+# unique(is.na(t))
+# 
+# t2 <- t |> 
+#   filter(CPUEun)
 ```
 
 ## DATRAS
@@ -2409,7 +2411,6 @@ names(FLO_LAT) <- c(
   "species", "Rect", "validity", "aL", "b", "estWyear", "CPUEunBIOyear",
   "date", "speed", "LATDD", "LONGDD", "Depth", "RSA", "RS", "CPUEst", "CPUEstBIOyear"
 )
-
 
 FLO2 <- merge(FLO |> mutate(source = "datras"),
   floswe |> mutate(source = "sweden"),
