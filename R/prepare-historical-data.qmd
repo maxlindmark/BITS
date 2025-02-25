@@ -592,7 +592,7 @@ names(dabTStuart) <- c("vessel", "date", "year", "trawl_time", "SD", "Rect", "sp
 
 sort(names(dabhist))
 
-dabhistStuart <- plahist[, c("Fartyg", "datum", "Œr", "tråltid", "område", "speed", "idx", "LATDD", "LONGDD", "Depth", "art", "lŠngd", "CPUEantal", "RSA", "RS")]
+dabhistStuart <- dabhist[, c("Fartyg", "datum", "Œr", "tråltid", "område", "speed", "idx", "LATDD", "LONGDD", "Depth", "art", "lŠngd", "CPUEantal", "RSA", "RS")]
 
 names(dabhistStuart) <- c("vessel", "date", "year", "trawl_time", "SD", "speed", "IDX", "LATDD", "LONGDD", "Depth", "species", "Lengthcl", "CPUEun", "RSA", "RS")
 # summary(dabhistStuart)
@@ -2054,7 +2054,7 @@ hlcodL |>
 # plot(x = c(10:100),
 #      y = (mean(lwCOD$aL)*c(10:100)^mean(lwCOD$b))/1000)
 
-##### flounder hlfloL
+##### flounder
 hlfloL <- hlfloL |> left_join(lwFLO, by = "Year")
 
 hlfloL$estWyear <- (hlfloL$aL * hlfloL$LngtCm^hlfloL$b) / 1000
@@ -2064,7 +2064,7 @@ hlfloL$CPUEunBIOyear <- hlfloL$CPUEun * hlfloL$estWyear
 hlfloL$CPUEunBIOyear[hlfloL$SpecVal == "zeroCatch"] <- 0
 
 
-##### plaice hlfloL
+##### plaice 
 hlplaL <- hlplaL |> left_join(lwPLA, by = "Year")
 
 hlplaL$estWyear <- (hlplaL$aL * hlplaL$LngtCm^hlplaL$b) / 1000
@@ -2074,7 +2074,7 @@ hlplaL$CPUEunBIOyear <- hlplaL$CPUEun * hlplaL$estWyear
 hlplaL$CPUEunBIOyear[hlplaL$SpecVal == "zeroCatch"] <- 0
 
 
-##### dab hlfloL
+##### dab 
 hldabL <- hldabL |> left_join(lwDAB, by = "Year")
 
 hldabL$estWyear <- (hldabL$aL * hldabL$LngtCm^hldabL$b) / 1000
@@ -2084,7 +2084,7 @@ hldabL$CPUEunBIOyear <- hldabL$CPUEun * hldabL$estWyear
 hldabL$CPUEunBIOyear[hldabL$SpecVal == "zeroCatch"] <- 0
 
 
-##### turbot hlfloL
+##### turbot 
 hlturL <- hlturL |> left_join(lwTUR, by = "Year")
 
 hlturL$estWyear <- (hlturL$aL * hlturL$LngtCm^hlturL$b) / 1000
@@ -2094,7 +2094,7 @@ hlturL$CPUEunBIOyear <- hlturL$CPUEun * hlturL$estWyear
 hlturL$CPUEunBIOyear[hlturL$SpecVal == "zeroCatch"] <- 0
 
 
-##### whiting hlfloL
+##### whiting 
 hlwhiL <- hlwhiL |> left_join(lwWHI, by = "Year")
 
 hlwhiL$estWyear <- (hlwhiL$aL * hlwhiL$LngtCm^hlwhiL$b) / 1000
