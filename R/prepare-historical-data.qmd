@@ -383,7 +383,7 @@ type2 <- c("Invalid", "Calibration")
 codT <- codT[!codT$Validity..haul. %in% type, ]
 flounderT <- flounderT[!flounderT$Validity..haul. %in% type, ]
 plaiceT <- plaiceT[!plaiceT$Validity..haul. %in% type, ]
-dabT <- plaiceT[!dabT$Validity..haul. %in% type, ]
+dabT <- dabT[!dabT$Validity..haul. %in% type, ]
 turbotT <- turbotT[!turbotT$Validity..haul. %in% type, ]
 whitingT <- whitingT[!whitingT$Validity..haul. %in% type, ]
 index <- index[!index$STAVALCODE_DESCENG %in% type2, ]
@@ -692,6 +692,13 @@ DataStuart_ids <- unique(DataStuart$IDX)
 DataStuart <- DataStuart |>
   separate(IDX, sep = ":", into = c("IDX_SSB", "date2")) |>
   dplyr::select(-date2)
+
+DataStuart |> 
+  filter(year >= 1979) |> 
+  summarise(mean = mean(CPUEst), .by = c(year, species)) |> 
+  ggplot(aes(year, mean, color = species, fill = species)) +
+  facet_wrap(~species, scales = "free") +
+  geom_col()
 ```
 
 ## DATRAS
