@@ -2126,7 +2126,7 @@ codswe$CPUEstBIOyear[is.na(codswe$CPUEstBIOyear)] <- 0
 floswe <- DataStuart[DataStuart$species == "Platichthys flesus", ]
 
 floswe <- floswe |> left_join(lwFLO |> rename(year = Year), by = "year")
-floswe$estWyear <- floswe$aL * floswe$Lengthcl^floswe$b
+floswe$estWyear <- floswe$aL * floswe$Lengthcl^floswe$b / 1000
 
 floswe$CPUEunBIOyear <- floswe$CPUEun * floswe$estWyear
 

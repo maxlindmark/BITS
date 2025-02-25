@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Max Lindmark">
-<meta name="dcterms.date" content="2025-02-24">
+<meta name="dcterms.date" content="2025-02-25">
 
 <title>Collate historical Baltic Sea trawl survey data</title>
 <style>
@@ -3099,7 +3099,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2025-02-24</p>
+      <p class="date">2025-02-25</p>
     </div>
   </div>
   
@@ -4934,17 +4934,17 @@ Caused by warning:
 <span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a>datras <span class="ot">&lt;-</span> <span class="fu">readExchange</span>(<span class="fu">paste0</span>(home, <span class="st">&quot;/data/trawl-data-historical/Datras/Exchange Data_2017-03-28 11_54_40.zip&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Processing csv file:
-[1] &quot;/var/folders/n5/73wp9rsj3kj_rxw44s7mslq40000gn/T//RtmpFiVSpv/Exchange Data_2017-03-28 11_54_40.csv&quot;
+[1] &quot;/var/folders/n5/73wp9rsj3kj_rxw44s7mslq40000gn/T//RtmprXJb1J/Exchange Data_2017-03-28 11_54_40.csv&quot;
 Locating lines with headers
    user  system elapsed 
-  2.276   0.057   2.337 
+  2.624   0.075   2.745 
 Reading data files
    user  system elapsed 
-  0.100   0.001   0.100 
+  0.121   0.005   0.138 
    user  system elapsed 
-  3.693   0.077   3.776 
+  4.323   0.193   4.849 
    user  system elapsed 
-  2.345   0.065   2.411 
+  2.758   0.106   2.919 
 Classes of the variables
 $CA
        RecordType            Survey           Quarter           Country 
@@ -6842,7 +6842,7 @@ Caused by warning:
 <span id="cb109-79"><a href="#cb109-79" aria-hidden="true" tabindex="-1"></a>floswe <span class="ot">&lt;-</span> DataStuart[DataStuart<span class="sc">$</span>species <span class="sc">==</span> <span class="st">&quot;Platichthys flesus&quot;</span>, ]</span>
 <span id="cb109-80"><a href="#cb109-80" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb109-81"><a href="#cb109-81" aria-hidden="true" tabindex="-1"></a>floswe <span class="ot">&lt;-</span> floswe <span class="sc">|&gt;</span> <span class="fu">left_join</span>(lwFLO <span class="sc">|&gt;</span> <span class="fu">rename</span>(<span class="at">year =</span> Year), <span class="at">by =</span> <span class="st">&quot;year&quot;</span>)</span>
-<span id="cb109-82"><a href="#cb109-82" aria-hidden="true" tabindex="-1"></a>floswe<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> floswe<span class="sc">$</span>aL <span class="sc">*</span> floswe<span class="sc">$</span>Lengthcl<span class="sc">^</span>floswe<span class="sc">$</span>b</span>
+<span id="cb109-82"><a href="#cb109-82" aria-hidden="true" tabindex="-1"></a>floswe<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> floswe<span class="sc">$</span>aL <span class="sc">*</span> floswe<span class="sc">$</span>Lengthcl<span class="sc">^</span>floswe<span class="sc">$</span>b <span class="sc">/</span> <span class="dv">1000</span></span>
 <span id="cb109-83"><a href="#cb109-83" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb109-84"><a href="#cb109-84" aria-hidden="true" tabindex="-1"></a>floswe<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> floswe<span class="sc">$</span>CPUEun <span class="sc">*</span> floswe<span class="sc">$</span>estWyear</span>
 <span id="cb109-85"><a href="#cb109-85" aria-hidden="true" tabindex="-1"></a></span>
