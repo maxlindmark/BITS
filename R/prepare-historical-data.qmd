@@ -2185,6 +2185,20 @@ dabswe$CPUEstBIOyear <- dabswe$CPUEst * dabswe$estWyear
 dabswe$CPUEunBIOyear[is.na(dabswe$CPUEunBIOyear)] <- 0
 dabswe$CPUEstBIOyear[is.na(dabswe$CPUEstBIOyear)] <- 0
 
+# A strange thing with dab and turbot in the swedish data is that I have CPUE == 0 but !(is.na(length)). I'll delete this
+# dabswe |> 
+#   filter(CPUEun == 0 & !is.na(Lengthcl))
+
+dabswe <- dabswe |> 
+  filter(!(CPUEun == 0 & !is.na(Lengthcl))) |> 
+  filter(!(is.na(Lengthcl) & CPUEun > 0))
+
+# dabswe |> 
+#   filter(CPUEun == 0) |> distinct(Lengthcl)
+# dabswe |> 
+#   filter(is.na(Lengthcl)) |> distinct(CPUEun)
+
+
 ###### turbot DataStuart
 turswe <- DataStuart[DataStuart$species == "Psetta maxima", ]
 
@@ -2203,6 +2217,19 @@ turswe$CPUEstBIOyear <- turswe$CPUEst * turswe$estWyear
 # change NAs in CPUEs with 0s
 turswe$CPUEunBIOyear[is.na(turswe$CPUEunBIOyear)] <- 0
 turswe$CPUEstBIOyear[is.na(turswe$CPUEstBIOyear)] <- 0
+
+# A strange thing with dab and turbot in the swedish data is that I have CPUE == 0 but !(is.na(length)). I'll delete this
+# turswe |>
+#   filter(CPUEun == 0 & !is.na(Lengthcl))
+
+turswe <- turswe |> 
+  filter(!(CPUEun == 0 & !is.na(Lengthcl))) |> 
+  filter(!(is.na(Lengthcl) & CPUEun > 0))
+
+# turswe |>
+#   filter(CPUEun == 0) |> distinct(Lengthcl)
+# turswe |>
+#   filter(is.na(Lengthcl)) |> distinct(CPUEun)
 
 
 ###### whiting DataStuart
@@ -2411,6 +2438,43 @@ names(FLO_LAT) <- c(
   "species", "Rect", "validity", "aL", "b", "estWyear", "CPUEunBIOyear",
   "date", "speed", "LATDD", "LONGDD", "Depth", "RSA", "RS", "CPUEst", "CPUEstBIOyear"
 )
+
+# Average proportions 0's
+# p1 <- FLO_LAT |> 
+#   mutate(country = "Lat",
+#          trawl_time = as.character(trawl_time)) |> 
+#   bind_rows(floswe |> mutate(country = "Swe")) |> 
+#   filter(year > 1977 & year < 2000) |> 
+#   summarise(tot_catch = sum(CPUEstBIOyear), .by = c(IDX, year, country)) |> 
+#   mutate(catch = ifelse(tot_catch == 0, "N", "Y")) |> 
+#   summarise(prop_empty = median(catch == "N"), .by = c(year, country)) |> 
+#   ggplot(aes(year, prop_empty, color = country)) + 
+#   geom_line() +
+#   geom_point()
+# 
+# # Average weight
+# p2 <- FLO_LAT |> 
+#   mutate(country = "Lat",
+#          trawl_time = as.character(trawl_time)) |> 
+#   bind_rows(floswe |> mutate(country = "Swe")) |> 
+#   filter(year > 1977 & year < 2000) |> 
+#   summarise(mean_cpue = median(CPUEstBIOyear), .by = c(year, country)) |> 
+#   ggplot(aes(year, mean_cpue, color = country)) + 
+#   geom_line() +
+#   geom_point()
+# 
+# # Average abundance
+# p3 <- FLO_LAT |> 
+#   mutate(country = "Lat",
+#          trawl_time = as.character(trawl_time)) |> 
+#   bind_rows(floswe |> mutate(country = "Swe")) |> 
+#   filter(year > 1977 & year < 2000) |> 
+#   summarise(mean_cpue = median(CPUEst), .by = c(year, country)) |> 
+#   ggplot(aes(year, mean_cpue, color = country)) + 
+#   geom_line() +
+#   geom_point()
+# 
+# p1 / p2 / p3
 
 FLO2 <- merge(FLO |> mutate(source = "datras"),
   floswe |> mutate(source = "sweden"),
@@ -2661,7 +2725,7 @@ COD2 <- COD2 |>
     month = month(as_date(date)),
     quarter = quarter(as_date(date))
   ) |>
-  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter,
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b,
                 CPUEun # For comparison
                 ) |>
   rename(
@@ -2681,7 +2745,7 @@ FLO2 <- FLO2 |>
     month = month(as_date(date)),
     quarter = quarter(as_date(date))
   ) |>
-  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |>
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) |>
   rename(
     lat = LATDD,
     lon = LONGDD,
@@ -2699,7 +2763,7 @@ PLA <- PLA |>
     month = month(as_date(date)),
     quarter = quarter(as_date(date))
   ) |>
-  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |>
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) |>
   rename(
     lat = LATDD,
     lon = LONGDD,
@@ -2717,7 +2781,7 @@ DAB <- DAB |>
     month = month(as_date(date)),
     quarter = quarter(as_date(date))
   ) |>
-  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |>
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) |>
   rename(
     lat = LATDD,
     lon = LONGDD,
@@ -2734,7 +2798,7 @@ TUR <- TUR |>
     month = month(as_date(date)),
     quarter = quarter(as_date(date))
   ) |>
-  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |>
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) |>
   rename(
     lat = LATDD,
     lon = LONGDD,
@@ -2751,7 +2815,7 @@ WHI <- WHI |>
     month = month(as_date(date)),
     quarter = quarter(as_date(date))
   ) |>
-  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) |>
+  dplyr::select(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) |>
   rename(
     lat = LATDD,
     lon = LONGDD,

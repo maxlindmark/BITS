@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Max Lindmark">
-<meta name="dcterms.date" content="2025-02-25">
+<meta name="dcterms.date" content="2025-03-05">
 
 <title>Collate historical Baltic Sea trawl survey data</title>
 <style>
@@ -3099,7 +3099,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2025-02-25</p>
+      <p class="date">2025-03-05</p>
     </div>
   </div>
   
@@ -4943,17 +4943,17 @@ Caused by warning:
 <span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a>datras <span class="ot">&lt;-</span> <span class="fu">readExchange</span>(<span class="fu">paste0</span>(home, <span class="st">&quot;/data/trawl-data-historical/Datras/Exchange Data_2017-03-28 11_54_40.zip&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Processing csv file:
-[1] &quot;/var/folders/n5/73wp9rsj3kj_rxw44s7mslq40000gn/T//Rtmp8dSEuk/Exchange Data_2017-03-28 11_54_40.csv&quot;
+[1] &quot;/var/folders/n5/73wp9rsj3kj_rxw44s7mslq40000gn/T//RtmprwJ4Cz/Exchange Data_2017-03-28 11_54_40.csv&quot;
 Locating lines with headers
    user  system elapsed 
-  2.372   0.061   2.446 
+  2.504   0.060   2.569 
 Reading data files
    user  system elapsed 
-  0.107   0.002   0.109 
+  0.105   0.002   0.107 
    user  system elapsed 
-  3.354   0.076   3.436 
+  3.572   0.099   3.678 
    user  system elapsed 
-  2.675   0.074   2.755 
+  2.904   0.124   3.039 
 Classes of the variables
 $CA
        RecordType            Survey           Quarter           Country 
@@ -6901,78 +6901,105 @@ Caused by warning:
 <span id="cb109-129"><a href="#cb109-129" aria-hidden="true" tabindex="-1"></a>dabswe<span class="sc">$</span>CPUEunBIOyear[<span class="fu">is.na</span>(dabswe<span class="sc">$</span>CPUEunBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
 <span id="cb109-130"><a href="#cb109-130" aria-hidden="true" tabindex="-1"></a>dabswe<span class="sc">$</span>CPUEstBIOyear[<span class="fu">is.na</span>(dabswe<span class="sc">$</span>CPUEstBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
 <span id="cb109-131"><a href="#cb109-131" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-132"><a href="#cb109-132" aria-hidden="true" tabindex="-1"></a><span class="do">###### turbot DataStuart</span></span>
-<span id="cb109-133"><a href="#cb109-133" aria-hidden="true" tabindex="-1"></a>turswe <span class="ot">&lt;-</span> DataStuart[DataStuart<span class="sc">$</span>species <span class="sc">==</span> <span class="st">&quot;Psetta maxima&quot;</span>, ]</span>
-<span id="cb109-134"><a href="#cb109-134" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-135"><a href="#cb109-135" aria-hidden="true" tabindex="-1"></a>turswe <span class="ot">&lt;-</span> turswe <span class="sc">|&gt;</span></span>
-<span id="cb109-136"><a href="#cb109-136" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb109-137"><a href="#cb109-137" aria-hidden="true" tabindex="-1"></a>    <span class="at">aL =</span> <span class="fu">mean</span>(lwTUR<span class="sc">$</span>aL),</span>
-<span id="cb109-138"><a href="#cb109-138" aria-hidden="true" tabindex="-1"></a>    <span class="at">b =</span> <span class="fu">mean</span>(lwTUR<span class="sc">$</span>b)</span>
-<span id="cb109-139"><a href="#cb109-139" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb109-140"><a href="#cb109-140" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-141"><a href="#cb109-141" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> (turswe<span class="sc">$</span>aL <span class="sc">*</span> turswe<span class="sc">$</span>Lengthcl<span class="sc">^</span>turswe<span class="sc">$</span>b) <span class="sc">/</span> <span class="dv">1000</span></span>
-<span id="cb109-142"><a href="#cb109-142" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-143"><a href="#cb109-143" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> turswe<span class="sc">$</span>CPUEun <span class="sc">*</span> turswe<span class="sc">$</span>estWyear</span>
+<span id="cb109-132"><a href="#cb109-132" aria-hidden="true" tabindex="-1"></a><span class="co"># A strange thing with dab and turbot in the swedish data is that I have CPUE == 0 but !(is.na(length)). I&#39;ll delete this</span></span>
+<span id="cb109-133"><a href="#cb109-133" aria-hidden="true" tabindex="-1"></a><span class="co"># dabswe |&gt; </span></span>
+<span id="cb109-134"><a href="#cb109-134" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(CPUEun == 0 &amp; !is.na(Lengthcl))</span></span>
+<span id="cb109-135"><a href="#cb109-135" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-136"><a href="#cb109-136" aria-hidden="true" tabindex="-1"></a>dabswe <span class="ot">&lt;-</span> dabswe <span class="sc">|&gt;</span> </span>
+<span id="cb109-137"><a href="#cb109-137" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span>(CPUEun <span class="sc">==</span> <span class="dv">0</span> <span class="sc">&amp;</span> <span class="sc">!</span><span class="fu">is.na</span>(Lengthcl))) <span class="sc">|&gt;</span> </span>
+<span id="cb109-138"><a href="#cb109-138" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span>(<span class="fu">is.na</span>(Lengthcl) <span class="sc">&amp;</span> CPUEun <span class="sc">&gt;</span> <span class="dv">0</span>))</span>
+<span id="cb109-139"><a href="#cb109-139" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-140"><a href="#cb109-140" aria-hidden="true" tabindex="-1"></a><span class="co"># dabswe |&gt; </span></span>
+<span id="cb109-141"><a href="#cb109-141" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(CPUEun == 0) |&gt; distinct(Lengthcl)</span></span>
+<span id="cb109-142"><a href="#cb109-142" aria-hidden="true" tabindex="-1"></a><span class="co"># dabswe |&gt; </span></span>
+<span id="cb109-143"><a href="#cb109-143" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(is.na(Lengthcl)) |&gt; distinct(CPUEun)</span></span>
 <span id="cb109-144"><a href="#cb109-144" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-145"><a href="#cb109-145" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>CPUEstBIOyear <span class="ot">&lt;-</span> turswe<span class="sc">$</span>CPUEst <span class="sc">*</span> turswe<span class="sc">$</span>estWyear</span>
-<span id="cb109-146"><a href="#cb109-146" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-147"><a href="#cb109-147" aria-hidden="true" tabindex="-1"></a><span class="co"># change NAs in CPUEs with 0s</span></span>
-<span id="cb109-148"><a href="#cb109-148" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>CPUEunBIOyear[<span class="fu">is.na</span>(turswe<span class="sc">$</span>CPUEunBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
-<span id="cb109-149"><a href="#cb109-149" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>CPUEstBIOyear[<span class="fu">is.na</span>(turswe<span class="sc">$</span>CPUEstBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
-<span id="cb109-150"><a href="#cb109-150" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-151"><a href="#cb109-151" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-152"><a href="#cb109-152" aria-hidden="true" tabindex="-1"></a><span class="do">###### whiting DataStuart</span></span>
-<span id="cb109-153"><a href="#cb109-153" aria-hidden="true" tabindex="-1"></a>whiswe <span class="ot">&lt;-</span> DataStuart[DataStuart<span class="sc">$</span>species <span class="sc">==</span> <span class="st">&quot;Merlangius merlangus&quot;</span>, ]</span>
+<span id="cb109-145"><a href="#cb109-145" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-146"><a href="#cb109-146" aria-hidden="true" tabindex="-1"></a><span class="do">###### turbot DataStuart</span></span>
+<span id="cb109-147"><a href="#cb109-147" aria-hidden="true" tabindex="-1"></a>turswe <span class="ot">&lt;-</span> DataStuart[DataStuart<span class="sc">$</span>species <span class="sc">==</span> <span class="st">&quot;Psetta maxima&quot;</span>, ]</span>
+<span id="cb109-148"><a href="#cb109-148" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-149"><a href="#cb109-149" aria-hidden="true" tabindex="-1"></a>turswe <span class="ot">&lt;-</span> turswe <span class="sc">|&gt;</span></span>
+<span id="cb109-150"><a href="#cb109-150" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb109-151"><a href="#cb109-151" aria-hidden="true" tabindex="-1"></a>    <span class="at">aL =</span> <span class="fu">mean</span>(lwTUR<span class="sc">$</span>aL),</span>
+<span id="cb109-152"><a href="#cb109-152" aria-hidden="true" tabindex="-1"></a>    <span class="at">b =</span> <span class="fu">mean</span>(lwTUR<span class="sc">$</span>b)</span>
+<span id="cb109-153"><a href="#cb109-153" aria-hidden="true" tabindex="-1"></a>  )</span>
 <span id="cb109-154"><a href="#cb109-154" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-155"><a href="#cb109-155" aria-hidden="true" tabindex="-1"></a>whiswe <span class="ot">&lt;-</span> whiswe <span class="sc">|&gt;</span></span>
-<span id="cb109-156"><a href="#cb109-156" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb109-157"><a href="#cb109-157" aria-hidden="true" tabindex="-1"></a>    <span class="at">aL =</span> <span class="fu">mean</span>(lwWHI<span class="sc">$</span>aL),</span>
-<span id="cb109-158"><a href="#cb109-158" aria-hidden="true" tabindex="-1"></a>    <span class="at">b =</span> <span class="fu">mean</span>(lwWHI<span class="sc">$</span>b)</span>
-<span id="cb109-159"><a href="#cb109-159" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb109-155"><a href="#cb109-155" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> (turswe<span class="sc">$</span>aL <span class="sc">*</span> turswe<span class="sc">$</span>Lengthcl<span class="sc">^</span>turswe<span class="sc">$</span>b) <span class="sc">/</span> <span class="dv">1000</span></span>
+<span id="cb109-156"><a href="#cb109-156" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-157"><a href="#cb109-157" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> turswe<span class="sc">$</span>CPUEun <span class="sc">*</span> turswe<span class="sc">$</span>estWyear</span>
+<span id="cb109-158"><a href="#cb109-158" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-159"><a href="#cb109-159" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>CPUEstBIOyear <span class="ot">&lt;-</span> turswe<span class="sc">$</span>CPUEst <span class="sc">*</span> turswe<span class="sc">$</span>estWyear</span>
 <span id="cb109-160"><a href="#cb109-160" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-161"><a href="#cb109-161" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> (whiswe<span class="sc">$</span>aL <span class="sc">*</span> whiswe<span class="sc">$</span>Lengthcl<span class="sc">^</span>whiswe<span class="sc">$</span>b) <span class="sc">/</span> <span class="dv">1000</span></span>
-<span id="cb109-162"><a href="#cb109-162" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-163"><a href="#cb109-163" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> whiswe<span class="sc">$</span>CPUEun <span class="sc">*</span> whiswe<span class="sc">$</span>estWyear</span>
+<span id="cb109-161"><a href="#cb109-161" aria-hidden="true" tabindex="-1"></a><span class="co"># change NAs in CPUEs with 0s</span></span>
+<span id="cb109-162"><a href="#cb109-162" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>CPUEunBIOyear[<span class="fu">is.na</span>(turswe<span class="sc">$</span>CPUEunBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb109-163"><a href="#cb109-163" aria-hidden="true" tabindex="-1"></a>turswe<span class="sc">$</span>CPUEstBIOyear[<span class="fu">is.na</span>(turswe<span class="sc">$</span>CPUEstBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
 <span id="cb109-164"><a href="#cb109-164" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-165"><a href="#cb109-165" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>CPUEstBIOyear <span class="ot">&lt;-</span> whiswe<span class="sc">$</span>CPUEst <span class="sc">*</span> whiswe<span class="sc">$</span>estWyear</span>
-<span id="cb109-166"><a href="#cb109-166" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-167"><a href="#cb109-167" aria-hidden="true" tabindex="-1"></a><span class="co"># change NAs in CPUEs with 0s</span></span>
-<span id="cb109-168"><a href="#cb109-168" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>CPUEunBIOyear[<span class="fu">is.na</span>(whiswe<span class="sc">$</span>CPUEunBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
-<span id="cb109-169"><a href="#cb109-169" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>CPUEstBIOyear[<span class="fu">is.na</span>(whiswe<span class="sc">$</span>CPUEstBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
-<span id="cb109-170"><a href="#cb109-170" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-171"><a href="#cb109-171" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-172"><a href="#cb109-172" aria-hidden="true" tabindex="-1"></a><span class="do">##### cod HL_LATcodL</span></span>
-<span id="cb109-173"><a href="#cb109-173" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-174"><a href="#cb109-174" aria-hidden="true" tabindex="-1"></a>HL_LATcodL <span class="ot">&lt;-</span> HL_LATcodL <span class="sc">|&gt;</span></span>
-<span id="cb109-175"><a href="#cb109-175" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(Year <span class="sc">&lt;=</span> <span class="dv">2016</span>)</span>
-<span id="cb109-176"><a href="#cb109-176" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-177"><a href="#cb109-177" aria-hidden="true" tabindex="-1"></a>HL_LATcodL <span class="ot">&lt;-</span> HL_LATcodL <span class="sc">|&gt;</span> <span class="fu">left_join</span>(lwCOD, <span class="at">by =</span> <span class="st">&quot;Year&quot;</span>)</span>
+<span id="cb109-165"><a href="#cb109-165" aria-hidden="true" tabindex="-1"></a><span class="co"># A strange thing with dab and turbot in the swedish data is that I have CPUE == 0 but !(is.na(length)). I&#39;ll delete this</span></span>
+<span id="cb109-166"><a href="#cb109-166" aria-hidden="true" tabindex="-1"></a><span class="co"># turswe |&gt;</span></span>
+<span id="cb109-167"><a href="#cb109-167" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(CPUEun == 0 &amp; !is.na(Lengthcl))</span></span>
+<span id="cb109-168"><a href="#cb109-168" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-169"><a href="#cb109-169" aria-hidden="true" tabindex="-1"></a>turswe <span class="ot">&lt;-</span> turswe <span class="sc">|&gt;</span> </span>
+<span id="cb109-170"><a href="#cb109-170" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span>(CPUEun <span class="sc">==</span> <span class="dv">0</span> <span class="sc">&amp;</span> <span class="sc">!</span><span class="fu">is.na</span>(Lengthcl))) <span class="sc">|&gt;</span> </span>
+<span id="cb109-171"><a href="#cb109-171" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span>(<span class="fu">is.na</span>(Lengthcl) <span class="sc">&amp;</span> CPUEun <span class="sc">&gt;</span> <span class="dv">0</span>))</span>
+<span id="cb109-172"><a href="#cb109-172" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-173"><a href="#cb109-173" aria-hidden="true" tabindex="-1"></a><span class="co"># turswe |&gt;</span></span>
+<span id="cb109-174"><a href="#cb109-174" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(CPUEun == 0) |&gt; distinct(Lengthcl)</span></span>
+<span id="cb109-175"><a href="#cb109-175" aria-hidden="true" tabindex="-1"></a><span class="co"># turswe |&gt;</span></span>
+<span id="cb109-176"><a href="#cb109-176" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(is.na(Lengthcl)) |&gt; distinct(CPUEun)</span></span>
+<span id="cb109-177"><a href="#cb109-177" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb109-178"><a href="#cb109-178" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-179"><a href="#cb109-179" aria-hidden="true" tabindex="-1"></a>HL_LATcodL<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> (HL_LATcodL<span class="sc">$</span>aL <span class="sc">*</span> HL_LATcodL<span class="sc">$</span>LngtClas<span class="sc">^</span>HL_LATcodL<span class="sc">$</span>b) <span class="sc">/</span> <span class="dv">1000</span></span>
-<span id="cb109-180"><a href="#cb109-180" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-181"><a href="#cb109-181" aria-hidden="true" tabindex="-1"></a>HL_LATcodL<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> HL_LATcodL<span class="sc">$</span>CPUEun <span class="sc">*</span> HL_LATcodL<span class="sc">$</span>estWyear</span>
-<span id="cb109-182"><a href="#cb109-182" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-183"><a href="#cb109-183" aria-hidden="true" tabindex="-1"></a>HL_LATcodL<span class="sc">$</span>CPUEunBIOyear[HL_LATcodL<span class="sc">$</span>SpecVal <span class="sc">==</span> <span class="st">&quot;zeroCatch&quot;</span>] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
-<span id="cb109-184"><a href="#cb109-184" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-185"><a href="#cb109-185" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-186"><a href="#cb109-186" aria-hidden="true" tabindex="-1"></a><span class="do">##### flounder HL_LATfloL</span></span>
+<span id="cb109-179"><a href="#cb109-179" aria-hidden="true" tabindex="-1"></a><span class="do">###### whiting DataStuart</span></span>
+<span id="cb109-180"><a href="#cb109-180" aria-hidden="true" tabindex="-1"></a>whiswe <span class="ot">&lt;-</span> DataStuart[DataStuart<span class="sc">$</span>species <span class="sc">==</span> <span class="st">&quot;Merlangius merlangus&quot;</span>, ]</span>
+<span id="cb109-181"><a href="#cb109-181" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-182"><a href="#cb109-182" aria-hidden="true" tabindex="-1"></a>whiswe <span class="ot">&lt;-</span> whiswe <span class="sc">|&gt;</span></span>
+<span id="cb109-183"><a href="#cb109-183" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb109-184"><a href="#cb109-184" aria-hidden="true" tabindex="-1"></a>    <span class="at">aL =</span> <span class="fu">mean</span>(lwWHI<span class="sc">$</span>aL),</span>
+<span id="cb109-185"><a href="#cb109-185" aria-hidden="true" tabindex="-1"></a>    <span class="at">b =</span> <span class="fu">mean</span>(lwWHI<span class="sc">$</span>b)</span>
+<span id="cb109-186"><a href="#cb109-186" aria-hidden="true" tabindex="-1"></a>  )</span>
 <span id="cb109-187"><a href="#cb109-187" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-188"><a href="#cb109-188" aria-hidden="true" tabindex="-1"></a>HL_LATfloL <span class="ot">&lt;-</span> HL_LATfloL <span class="sc">|&gt;</span></span>
-<span id="cb109-189"><a href="#cb109-189" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(Year <span class="sc">&lt;=</span> <span class="dv">2016</span>)</span>
-<span id="cb109-190"><a href="#cb109-190" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-191"><a href="#cb109-191" aria-hidden="true" tabindex="-1"></a>HL_LATfloL <span class="ot">&lt;-</span> HL_LATfloL <span class="sc">|&gt;</span> <span class="fu">left_join</span>(lwFLO, <span class="at">by =</span> <span class="st">&quot;Year&quot;</span>)</span>
-<span id="cb109-192"><a href="#cb109-192" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-193"><a href="#cb109-193" aria-hidden="true" tabindex="-1"></a>HL_LATfloL<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> (HL_LATfloL<span class="sc">$</span>aL <span class="sc">*</span> HL_LATfloL<span class="sc">$</span>LngtClas<span class="sc">^</span>HL_LATfloL<span class="sc">$</span>b) <span class="sc">/</span> <span class="dv">1000</span></span>
-<span id="cb109-194"><a href="#cb109-194" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-195"><a href="#cb109-195" aria-hidden="true" tabindex="-1"></a>HL_LATfloL<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> HL_LATfloL<span class="sc">$</span>CPUEun <span class="sc">*</span> HL_LATfloL<span class="sc">$</span>estWyear</span>
-<span id="cb109-196"><a href="#cb109-196" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-197"><a href="#cb109-197" aria-hidden="true" tabindex="-1"></a>HL_LATfloL<span class="sc">$</span>CPUEunBIOyear[HL_LATfloL<span class="sc">$</span>SpecVal <span class="sc">==</span> <span class="st">&quot;zeroCatch&quot;</span>] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb109-188"><a href="#cb109-188" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> (whiswe<span class="sc">$</span>aL <span class="sc">*</span> whiswe<span class="sc">$</span>Lengthcl<span class="sc">^</span>whiswe<span class="sc">$</span>b) <span class="sc">/</span> <span class="dv">1000</span></span>
+<span id="cb109-189"><a href="#cb109-189" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-190"><a href="#cb109-190" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> whiswe<span class="sc">$</span>CPUEun <span class="sc">*</span> whiswe<span class="sc">$</span>estWyear</span>
+<span id="cb109-191"><a href="#cb109-191" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-192"><a href="#cb109-192" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>CPUEstBIOyear <span class="ot">&lt;-</span> whiswe<span class="sc">$</span>CPUEst <span class="sc">*</span> whiswe<span class="sc">$</span>estWyear</span>
+<span id="cb109-193"><a href="#cb109-193" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-194"><a href="#cb109-194" aria-hidden="true" tabindex="-1"></a><span class="co"># change NAs in CPUEs with 0s</span></span>
+<span id="cb109-195"><a href="#cb109-195" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>CPUEunBIOyear[<span class="fu">is.na</span>(whiswe<span class="sc">$</span>CPUEunBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb109-196"><a href="#cb109-196" aria-hidden="true" tabindex="-1"></a>whiswe<span class="sc">$</span>CPUEstBIOyear[<span class="fu">is.na</span>(whiswe<span class="sc">$</span>CPUEstBIOyear)] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb109-197"><a href="#cb109-197" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb109-198"><a href="#cb109-198" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-199"><a href="#cb109-199" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-200"><a href="#cb109-200" aria-hidden="true" tabindex="-1"></a><span class="do">##### create the date in HHdata and HH_LAT</span></span>
-<span id="cb109-201"><a href="#cb109-201" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb109-202"><a href="#cb109-202" aria-hidden="true" tabindex="-1"></a>HHdata<span class="sc">$</span>date <span class="ot">&lt;-</span> <span class="fu">paste</span>(HHdata<span class="sc">$</span>Year, HHdata<span class="sc">$</span>Month, HHdata<span class="sc">$</span>Day, <span class="at">sep =</span> <span class="st">&quot;-&quot;</span>)</span>
-<span id="cb109-203"><a href="#cb109-203" aria-hidden="true" tabindex="-1"></a>HH_LAT<span class="sc">$</span>date <span class="ot">&lt;-</span> <span class="fu">paste</span>(HH_LAT<span class="sc">$</span>Year, HH_LAT<span class="sc">$</span>month, HH_LAT<span class="sc">$</span>Day, <span class="at">sep =</span> <span class="st">&quot;-&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb109-199"><a href="#cb109-199" aria-hidden="true" tabindex="-1"></a><span class="do">##### cod HL_LATcodL</span></span>
+<span id="cb109-200"><a href="#cb109-200" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-201"><a href="#cb109-201" aria-hidden="true" tabindex="-1"></a>HL_LATcodL <span class="ot">&lt;-</span> HL_LATcodL <span class="sc">|&gt;</span></span>
+<span id="cb109-202"><a href="#cb109-202" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(Year <span class="sc">&lt;=</span> <span class="dv">2016</span>)</span>
+<span id="cb109-203"><a href="#cb109-203" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-204"><a href="#cb109-204" aria-hidden="true" tabindex="-1"></a>HL_LATcodL <span class="ot">&lt;-</span> HL_LATcodL <span class="sc">|&gt;</span> <span class="fu">left_join</span>(lwCOD, <span class="at">by =</span> <span class="st">&quot;Year&quot;</span>)</span>
+<span id="cb109-205"><a href="#cb109-205" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-206"><a href="#cb109-206" aria-hidden="true" tabindex="-1"></a>HL_LATcodL<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> (HL_LATcodL<span class="sc">$</span>aL <span class="sc">*</span> HL_LATcodL<span class="sc">$</span>LngtClas<span class="sc">^</span>HL_LATcodL<span class="sc">$</span>b) <span class="sc">/</span> <span class="dv">1000</span></span>
+<span id="cb109-207"><a href="#cb109-207" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-208"><a href="#cb109-208" aria-hidden="true" tabindex="-1"></a>HL_LATcodL<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> HL_LATcodL<span class="sc">$</span>CPUEun <span class="sc">*</span> HL_LATcodL<span class="sc">$</span>estWyear</span>
+<span id="cb109-209"><a href="#cb109-209" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-210"><a href="#cb109-210" aria-hidden="true" tabindex="-1"></a>HL_LATcodL<span class="sc">$</span>CPUEunBIOyear[HL_LATcodL<span class="sc">$</span>SpecVal <span class="sc">==</span> <span class="st">&quot;zeroCatch&quot;</span>] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb109-211"><a href="#cb109-211" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-212"><a href="#cb109-212" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-213"><a href="#cb109-213" aria-hidden="true" tabindex="-1"></a><span class="do">##### flounder HL_LATfloL</span></span>
+<span id="cb109-214"><a href="#cb109-214" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-215"><a href="#cb109-215" aria-hidden="true" tabindex="-1"></a>HL_LATfloL <span class="ot">&lt;-</span> HL_LATfloL <span class="sc">|&gt;</span></span>
+<span id="cb109-216"><a href="#cb109-216" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(Year <span class="sc">&lt;=</span> <span class="dv">2016</span>)</span>
+<span id="cb109-217"><a href="#cb109-217" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-218"><a href="#cb109-218" aria-hidden="true" tabindex="-1"></a>HL_LATfloL <span class="ot">&lt;-</span> HL_LATfloL <span class="sc">|&gt;</span> <span class="fu">left_join</span>(lwFLO, <span class="at">by =</span> <span class="st">&quot;Year&quot;</span>)</span>
+<span id="cb109-219"><a href="#cb109-219" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-220"><a href="#cb109-220" aria-hidden="true" tabindex="-1"></a>HL_LATfloL<span class="sc">$</span>estWyear <span class="ot">&lt;-</span> (HL_LATfloL<span class="sc">$</span>aL <span class="sc">*</span> HL_LATfloL<span class="sc">$</span>LngtClas<span class="sc">^</span>HL_LATfloL<span class="sc">$</span>b) <span class="sc">/</span> <span class="dv">1000</span></span>
+<span id="cb109-221"><a href="#cb109-221" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-222"><a href="#cb109-222" aria-hidden="true" tabindex="-1"></a>HL_LATfloL<span class="sc">$</span>CPUEunBIOyear <span class="ot">&lt;-</span> HL_LATfloL<span class="sc">$</span>CPUEun <span class="sc">*</span> HL_LATfloL<span class="sc">$</span>estWyear</span>
+<span id="cb109-223"><a href="#cb109-223" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-224"><a href="#cb109-224" aria-hidden="true" tabindex="-1"></a>HL_LATfloL<span class="sc">$</span>CPUEunBIOyear[HL_LATfloL<span class="sc">$</span>SpecVal <span class="sc">==</span> <span class="st">&quot;zeroCatch&quot;</span>] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb109-225"><a href="#cb109-225" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-226"><a href="#cb109-226" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-227"><a href="#cb109-227" aria-hidden="true" tabindex="-1"></a><span class="do">##### create the date in HHdata and HH_LAT</span></span>
+<span id="cb109-228"><a href="#cb109-228" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb109-229"><a href="#cb109-229" aria-hidden="true" tabindex="-1"></a>HHdata<span class="sc">$</span>date <span class="ot">&lt;-</span> <span class="fu">paste</span>(HHdata<span class="sc">$</span>Year, HHdata<span class="sc">$</span>Month, HHdata<span class="sc">$</span>Day, <span class="at">sep =</span> <span class="st">&quot;-&quot;</span>)</span>
+<span id="cb109-230"><a href="#cb109-230" aria-hidden="true" tabindex="-1"></a>HH_LAT<span class="sc">$</span>date <span class="ot">&lt;-</span> <span class="fu">paste</span>(HH_LAT<span class="sc">$</span>Year, HH_LAT<span class="sc">$</span>month, HH_LAT<span class="sc">$</span>Day, <span class="at">sep =</span> <span class="st">&quot;-&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb110"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb110-1"><a href="#cb110-1" aria-hidden="true" tabindex="-1"></a><span class="do">##### read the sweep file with gear and speed info</span></span>
@@ -7200,24 +7227,61 @@ Caused by warning:
 <span id="cb128-4"><a href="#cb128-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;date&quot;</span>, <span class="st">&quot;speed&quot;</span>, <span class="st">&quot;LATDD&quot;</span>, <span class="st">&quot;LONGDD&quot;</span>, <span class="st">&quot;Depth&quot;</span>, <span class="st">&quot;RSA&quot;</span>, <span class="st">&quot;RS&quot;</span>, <span class="st">&quot;CPUEst&quot;</span>, <span class="st">&quot;CPUEstBIOyear&quot;</span></span>
 <span id="cb128-5"><a href="#cb128-5" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb128-6"><a href="#cb128-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb128-7"><a href="#cb128-7" aria-hidden="true" tabindex="-1"></a>FLO2 <span class="ot">&lt;-</span> <span class="fu">merge</span>(FLO <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">source =</span> <span class="st">&quot;datras&quot;</span>),</span>
-<span id="cb128-8"><a href="#cb128-8" aria-hidden="true" tabindex="-1"></a>  floswe <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">source =</span> <span class="st">&quot;sweden&quot;</span>),</span>
-<span id="cb128-9"><a href="#cb128-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">all =</span> T</span>
-<span id="cb128-10"><a href="#cb128-10" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb128-11"><a href="#cb128-11" aria-hidden="true" tabindex="-1"></a>FLO2 <span class="ot">&lt;-</span> <span class="fu">merge</span>(FLO2, FLO_LAT <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">source =</span> <span class="st">&quot;latvia&quot;</span>), <span class="at">all =</span> T)</span>
-<span id="cb128-12"><a href="#cb128-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb128-13"><a href="#cb128-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb128-14"><a href="#cb128-14" aria-hidden="true" tabindex="-1"></a>FLO2<span class="sc">$</span>CPUEst[FLO2<span class="sc">$</span>CPUEun <span class="sc">==</span> <span class="dv">0</span>] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
-<span id="cb128-15"><a href="#cb128-15" aria-hidden="true" tabindex="-1"></a><span class="co"># FLO2$CPUEstBIOuni[FLO2$CPUEun==0] &lt;- 0</span></span>
-<span id="cb128-16"><a href="#cb128-16" aria-hidden="true" tabindex="-1"></a>FLO2<span class="sc">$</span>CPUEstBIOyear[FLO2<span class="sc">$</span>CPUEun <span class="sc">==</span> <span class="dv">0</span>] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
-<span id="cb128-17"><a href="#cb128-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb128-18"><a href="#cb128-18" aria-hidden="true" tabindex="-1"></a><span class="do">### remove rows with no standardized CPUEs</span></span>
-<span id="cb128-19"><a href="#cb128-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb128-20"><a href="#cb128-20" aria-hidden="true" tabindex="-1"></a>FLO2 <span class="ot">&lt;-</span> FLO2[<span class="sc">!</span><span class="fu">is.na</span>(FLO2<span class="sc">$</span>CPUEst), ]</span>
-<span id="cb128-21"><a href="#cb128-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb128-22"><a href="#cb128-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb128-23"><a href="#cb128-23" aria-hidden="true" tabindex="-1"></a><span class="do">##### plaice</span></span>
-<span id="cb128-24"><a href="#cb128-24" aria-hidden="true" tabindex="-1"></a><span class="fu">sort</span>(<span class="fu">names</span>(hlplaL))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb128-7"><a href="#cb128-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Average proportions 0&#39;s</span></span>
+<span id="cb128-8"><a href="#cb128-8" aria-hidden="true" tabindex="-1"></a><span class="co"># p1 &lt;- FLO_LAT |&gt; </span></span>
+<span id="cb128-9"><a href="#cb128-9" aria-hidden="true" tabindex="-1"></a><span class="co">#   mutate(country = &quot;Lat&quot;,</span></span>
+<span id="cb128-10"><a href="#cb128-10" aria-hidden="true" tabindex="-1"></a><span class="co">#          trawl_time = as.character(trawl_time)) |&gt; </span></span>
+<span id="cb128-11"><a href="#cb128-11" aria-hidden="true" tabindex="-1"></a><span class="co">#   bind_rows(floswe |&gt; mutate(country = &quot;Swe&quot;)) |&gt; </span></span>
+<span id="cb128-12"><a href="#cb128-12" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(year &gt; 1977 &amp; year &lt; 2000) |&gt; </span></span>
+<span id="cb128-13"><a href="#cb128-13" aria-hidden="true" tabindex="-1"></a><span class="co">#   summarise(tot_catch = sum(CPUEstBIOyear), .by = c(IDX, year, country)) |&gt; </span></span>
+<span id="cb128-14"><a href="#cb128-14" aria-hidden="true" tabindex="-1"></a><span class="co">#   mutate(catch = ifelse(tot_catch == 0, &quot;N&quot;, &quot;Y&quot;)) |&gt; </span></span>
+<span id="cb128-15"><a href="#cb128-15" aria-hidden="true" tabindex="-1"></a><span class="co">#   summarise(prop_empty = median(catch == &quot;N&quot;), .by = c(year, country)) |&gt; </span></span>
+<span id="cb128-16"><a href="#cb128-16" aria-hidden="true" tabindex="-1"></a><span class="co">#   ggplot(aes(year, prop_empty, color = country)) + </span></span>
+<span id="cb128-17"><a href="#cb128-17" aria-hidden="true" tabindex="-1"></a><span class="co">#   geom_line() +</span></span>
+<span id="cb128-18"><a href="#cb128-18" aria-hidden="true" tabindex="-1"></a><span class="co">#   geom_point()</span></span>
+<span id="cb128-19"><a href="#cb128-19" aria-hidden="true" tabindex="-1"></a><span class="co"># </span></span>
+<span id="cb128-20"><a href="#cb128-20" aria-hidden="true" tabindex="-1"></a><span class="co"># # Average weight</span></span>
+<span id="cb128-21"><a href="#cb128-21" aria-hidden="true" tabindex="-1"></a><span class="co"># p2 &lt;- FLO_LAT |&gt; </span></span>
+<span id="cb128-22"><a href="#cb128-22" aria-hidden="true" tabindex="-1"></a><span class="co">#   mutate(country = &quot;Lat&quot;,</span></span>
+<span id="cb128-23"><a href="#cb128-23" aria-hidden="true" tabindex="-1"></a><span class="co">#          trawl_time = as.character(trawl_time)) |&gt; </span></span>
+<span id="cb128-24"><a href="#cb128-24" aria-hidden="true" tabindex="-1"></a><span class="co">#   bind_rows(floswe |&gt; mutate(country = &quot;Swe&quot;)) |&gt; </span></span>
+<span id="cb128-25"><a href="#cb128-25" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(year &gt; 1977 &amp; year &lt; 2000) |&gt; </span></span>
+<span id="cb128-26"><a href="#cb128-26" aria-hidden="true" tabindex="-1"></a><span class="co">#   summarise(mean_cpue = median(CPUEstBIOyear), .by = c(year, country)) |&gt; </span></span>
+<span id="cb128-27"><a href="#cb128-27" aria-hidden="true" tabindex="-1"></a><span class="co">#   ggplot(aes(year, mean_cpue, color = country)) + </span></span>
+<span id="cb128-28"><a href="#cb128-28" aria-hidden="true" tabindex="-1"></a><span class="co">#   geom_line() +</span></span>
+<span id="cb128-29"><a href="#cb128-29" aria-hidden="true" tabindex="-1"></a><span class="co">#   geom_point()</span></span>
+<span id="cb128-30"><a href="#cb128-30" aria-hidden="true" tabindex="-1"></a><span class="co"># </span></span>
+<span id="cb128-31"><a href="#cb128-31" aria-hidden="true" tabindex="-1"></a><span class="co"># # Average abundance</span></span>
+<span id="cb128-32"><a href="#cb128-32" aria-hidden="true" tabindex="-1"></a><span class="co"># p3 &lt;- FLO_LAT |&gt; </span></span>
+<span id="cb128-33"><a href="#cb128-33" aria-hidden="true" tabindex="-1"></a><span class="co">#   mutate(country = &quot;Lat&quot;,</span></span>
+<span id="cb128-34"><a href="#cb128-34" aria-hidden="true" tabindex="-1"></a><span class="co">#          trawl_time = as.character(trawl_time)) |&gt; </span></span>
+<span id="cb128-35"><a href="#cb128-35" aria-hidden="true" tabindex="-1"></a><span class="co">#   bind_rows(floswe |&gt; mutate(country = &quot;Swe&quot;)) |&gt; </span></span>
+<span id="cb128-36"><a href="#cb128-36" aria-hidden="true" tabindex="-1"></a><span class="co">#   filter(year &gt; 1977 &amp; year &lt; 2000) |&gt; </span></span>
+<span id="cb128-37"><a href="#cb128-37" aria-hidden="true" tabindex="-1"></a><span class="co">#   summarise(mean_cpue = median(CPUEst), .by = c(year, country)) |&gt; </span></span>
+<span id="cb128-38"><a href="#cb128-38" aria-hidden="true" tabindex="-1"></a><span class="co">#   ggplot(aes(year, mean_cpue, color = country)) + </span></span>
+<span id="cb128-39"><a href="#cb128-39" aria-hidden="true" tabindex="-1"></a><span class="co">#   geom_line() +</span></span>
+<span id="cb128-40"><a href="#cb128-40" aria-hidden="true" tabindex="-1"></a><span class="co">#   geom_point()</span></span>
+<span id="cb128-41"><a href="#cb128-41" aria-hidden="true" tabindex="-1"></a><span class="co"># </span></span>
+<span id="cb128-42"><a href="#cb128-42" aria-hidden="true" tabindex="-1"></a><span class="co"># p1 / p2 / p3</span></span>
+<span id="cb128-43"><a href="#cb128-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb128-44"><a href="#cb128-44" aria-hidden="true" tabindex="-1"></a>FLO2 <span class="ot">&lt;-</span> <span class="fu">merge</span>(FLO <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">source =</span> <span class="st">&quot;datras&quot;</span>),</span>
+<span id="cb128-45"><a href="#cb128-45" aria-hidden="true" tabindex="-1"></a>  floswe <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">source =</span> <span class="st">&quot;sweden&quot;</span>),</span>
+<span id="cb128-46"><a href="#cb128-46" aria-hidden="true" tabindex="-1"></a>  <span class="at">all =</span> T</span>
+<span id="cb128-47"><a href="#cb128-47" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb128-48"><a href="#cb128-48" aria-hidden="true" tabindex="-1"></a>FLO2 <span class="ot">&lt;-</span> <span class="fu">merge</span>(FLO2, FLO_LAT <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">source =</span> <span class="st">&quot;latvia&quot;</span>), <span class="at">all =</span> T)</span>
+<span id="cb128-49"><a href="#cb128-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb128-50"><a href="#cb128-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb128-51"><a href="#cb128-51" aria-hidden="true" tabindex="-1"></a>FLO2<span class="sc">$</span>CPUEst[FLO2<span class="sc">$</span>CPUEun <span class="sc">==</span> <span class="dv">0</span>] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb128-52"><a href="#cb128-52" aria-hidden="true" tabindex="-1"></a><span class="co"># FLO2$CPUEstBIOuni[FLO2$CPUEun==0] &lt;- 0</span></span>
+<span id="cb128-53"><a href="#cb128-53" aria-hidden="true" tabindex="-1"></a>FLO2<span class="sc">$</span>CPUEstBIOyear[FLO2<span class="sc">$</span>CPUEun <span class="sc">==</span> <span class="dv">0</span>] <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb128-54"><a href="#cb128-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb128-55"><a href="#cb128-55" aria-hidden="true" tabindex="-1"></a><span class="do">### remove rows with no standardized CPUEs</span></span>
+<span id="cb128-56"><a href="#cb128-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb128-57"><a href="#cb128-57" aria-hidden="true" tabindex="-1"></a>FLO2 <span class="ot">&lt;-</span> FLO2[<span class="sc">!</span><span class="fu">is.na</span>(FLO2<span class="sc">$</span>CPUEst), ]</span>
+<span id="cb128-58"><a href="#cb128-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb128-59"><a href="#cb128-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb128-60"><a href="#cb128-60" aria-hidden="true" tabindex="-1"></a><span class="do">##### plaice</span></span>
+<span id="cb128-61"><a href="#cb128-61" aria-hidden="true" tabindex="-1"></a><span class="fu">sort</span>(<span class="fu">names</span>(hlplaL))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code> [1] &quot;aL&quot;             &quot;b&quot;              &quot;BycSpecRecCode&quot; &quot;Country&quot;       
  [5] &quot;CPUEun&quot;         &quot;CPUEunBIOyear&quot;  &quot;DataType&quot;       &quot;DoorType&quot;      
@@ -7516,7 +7580,7 @@ Caused by warning:
 <span id="cb145-7"><a href="#cb145-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(<span class="fu">as_date</span>(date)),</span>
 <span id="cb145-8"><a href="#cb145-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">quarter =</span> <span class="fu">quarter</span>(<span class="fu">as_date</span>(date))</span>
 <span id="cb145-9"><a href="#cb145-9" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb145-10"><a href="#cb145-10" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter,</span>
+<span id="cb145-10"><a href="#cb145-10" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b,</span>
 <span id="cb145-11"><a href="#cb145-11" aria-hidden="true" tabindex="-1"></a>                CPUEun <span class="co"># For comparison</span></span>
 <span id="cb145-12"><a href="#cb145-12" aria-hidden="true" tabindex="-1"></a>                ) <span class="sc">|&gt;</span></span>
 <span id="cb145-13"><a href="#cb145-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
@@ -7536,7 +7600,7 @@ Caused by warning:
 <span id="cb145-27"><a href="#cb145-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(<span class="fu">as_date</span>(date)),</span>
 <span id="cb145-28"><a href="#cb145-28" aria-hidden="true" tabindex="-1"></a>    <span class="at">quarter =</span> <span class="fu">quarter</span>(<span class="fu">as_date</span>(date))</span>
 <span id="cb145-29"><a href="#cb145-29" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb145-30"><a href="#cb145-30" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) <span class="sc">|&gt;</span></span>
+<span id="cb145-30"><a href="#cb145-30" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) <span class="sc">|&gt;</span></span>
 <span id="cb145-31"><a href="#cb145-31" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
 <span id="cb145-32"><a href="#cb145-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">lat =</span> LATDD,</span>
 <span id="cb145-33"><a href="#cb145-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">lon =</span> LONGDD,</span>
@@ -7554,7 +7618,7 @@ Caused by warning:
 <span id="cb145-45"><a href="#cb145-45" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(<span class="fu">as_date</span>(date)),</span>
 <span id="cb145-46"><a href="#cb145-46" aria-hidden="true" tabindex="-1"></a>    <span class="at">quarter =</span> <span class="fu">quarter</span>(<span class="fu">as_date</span>(date))</span>
 <span id="cb145-47"><a href="#cb145-47" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb145-48"><a href="#cb145-48" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) <span class="sc">|&gt;</span></span>
+<span id="cb145-48"><a href="#cb145-48" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) <span class="sc">|&gt;</span></span>
 <span id="cb145-49"><a href="#cb145-49" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
 <span id="cb145-50"><a href="#cb145-50" aria-hidden="true" tabindex="-1"></a>    <span class="at">lat =</span> LATDD,</span>
 <span id="cb145-51"><a href="#cb145-51" aria-hidden="true" tabindex="-1"></a>    <span class="at">lon =</span> LONGDD,</span>
@@ -7572,7 +7636,7 @@ Caused by warning:
 <span id="cb145-63"><a href="#cb145-63" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(<span class="fu">as_date</span>(date)),</span>
 <span id="cb145-64"><a href="#cb145-64" aria-hidden="true" tabindex="-1"></a>    <span class="at">quarter =</span> <span class="fu">quarter</span>(<span class="fu">as_date</span>(date))</span>
 <span id="cb145-65"><a href="#cb145-65" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb145-66"><a href="#cb145-66" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) <span class="sc">|&gt;</span></span>
+<span id="cb145-66"><a href="#cb145-66" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) <span class="sc">|&gt;</span></span>
 <span id="cb145-67"><a href="#cb145-67" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
 <span id="cb145-68"><a href="#cb145-68" aria-hidden="true" tabindex="-1"></a>    <span class="at">lat =</span> LATDD,</span>
 <span id="cb145-69"><a href="#cb145-69" aria-hidden="true" tabindex="-1"></a>    <span class="at">lon =</span> LONGDD,</span>
@@ -7589,7 +7653,7 @@ Caused by warning:
 <span id="cb145-80"><a href="#cb145-80" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(<span class="fu">as_date</span>(date)),</span>
 <span id="cb145-81"><a href="#cb145-81" aria-hidden="true" tabindex="-1"></a>    <span class="at">quarter =</span> <span class="fu">quarter</span>(<span class="fu">as_date</span>(date))</span>
 <span id="cb145-82"><a href="#cb145-82" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb145-83"><a href="#cb145-83" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) <span class="sc">|&gt;</span></span>
+<span id="cb145-83"><a href="#cb145-83" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) <span class="sc">|&gt;</span></span>
 <span id="cb145-84"><a href="#cb145-84" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
 <span id="cb145-85"><a href="#cb145-85" aria-hidden="true" tabindex="-1"></a>    <span class="at">lat =</span> LATDD,</span>
 <span id="cb145-86"><a href="#cb145-86" aria-hidden="true" tabindex="-1"></a>    <span class="at">lon =</span> LONGDD,</span>
@@ -7606,7 +7670,7 @@ Caused by warning:
 <span id="cb145-97"><a href="#cb145-97" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(<span class="fu">as_date</span>(date)),</span>
 <span id="cb145-98"><a href="#cb145-98" aria-hidden="true" tabindex="-1"></a>    <span class="at">quarter =</span> <span class="fu">quarter</span>(<span class="fu">as_date</span>(date))</span>
 <span id="cb145-99"><a href="#cb145-99" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb145-100"><a href="#cb145-100" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter) <span class="sc">|&gt;</span></span>
+<span id="cb145-100"><a href="#cb145-100" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, SD, IDX, Lengthcl, species, Rect, date, LATDD, LONGDD, density, biomass_density, source, month, quarter, aL, b) <span class="sc">|&gt;</span></span>
 <span id="cb145-101"><a href="#cb145-101" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
 <span id="cb145-102"><a href="#cb145-102" aria-hidden="true" tabindex="-1"></a>    <span class="at">lat =</span> LATDD,</span>
 <span id="cb145-103"><a href="#cb145-103" aria-hidden="true" tabindex="-1"></a>    <span class="at">lon =</span> LONGDD,</span>

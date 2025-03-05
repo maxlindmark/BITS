@@ -588,8 +588,8 @@ datfle <- hlfleL |>
     length_class = ifelse(length_class == 0, NA, length_class)
   )
 
-write_csv(datcod, paste0(home, "/output/cod_cpue_length.csv"))
-write_csv(datfle, paste0(home, "/output/cod_cpue_length.csv"))
+# write_csv(datcod, paste0(home, "/output/cod_cpue_length.csv"))
+# write_csv(datfle, paste0(home, "/output/cod_cpue_length.csv"))
 ```
 
 ```{r}
